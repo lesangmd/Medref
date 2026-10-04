@@ -21,9 +21,14 @@ public final class MedRefDatabase {
     public static MedRefDatabase create(File file) {
         File parent = file.getParentFile();
         if (parent != null && !parent.exists()) parent.mkdirs();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            throw new IllegalStateException("Không thể tạo thư mục SQLite MedRef.");
+        }
         SQLiteDatabase db = SQLiteDatabase.openOrCreateDatabase(file, null);
-        db.execSQL("PRAGMA journal_mode=WAL");
-        db.execSQL("PRAGMA synchronous=NORMAL");
+        try { db.enableWriteAheadLogging(); } catch (Throwable ignored) {}
+        try (Cursor pragma = db.rawQuery("PRAGMA synchronous=NORMAL", null)) {
+            if (pragma.moveToFirst()) { /* apply PRAGMA through query API */ }
+        } catch (Throwable ignored) {}
         db.execSQL("CREATE TABLE IF NOT EXISTS protocols (id INTEGER, slug TEXT PRIMARY KEY, title_vi TEXT, title_en TEXT, summary TEXT, status TEXT, version TEXT, content_type TEXT, group_key TEXT, group_name_vi TEXT, specialty_key TEXT, specialty_name_vi TEXT, updated_at TEXT, search_text TEXT, detail_json TEXT NOT NULL)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_protocol_type_specialty ON protocols(content_type,specialty_key)");
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_protocol_group ON protocols(group_key)");
