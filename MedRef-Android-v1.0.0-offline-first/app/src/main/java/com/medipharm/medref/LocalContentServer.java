@@ -14,10 +14,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class LocalContentServer {
     public static final String HOST="app.medref.local";
     public static final String ORIGIN="https://"+HOST;
+    private static final Pattern SOURCE_MEDIA_PATTERN=Pattern.compile("(?i)mcr-source-([a-f0-9]{64})(?:-(?:\\d+x\\d+|scaled|rotated|\\d+))*\\.(png|jpe?g|gif|webp)$");
     private final Context context;
     private final MedRefDataRuntime runtime;
     private MedRefDatabase database;
@@ -30,11 +33,8 @@ public final class LocalContentServer {
         if(uri==null||uri.getHost()==null)return null;
         try{
             String host=uri.getHost().toLowerCase(Locale.ROOT);
-            if((host.equals("sachyhoc.com")||host.equals("www.sachyhoc.com"))&&isSourceMedia(uri)){
-                File f=new File(new File(runtime.getActiveDir(),"media"),uri.getLastPathSegment());
-                if(f.isFile())return response(200,"OK",mime(f.getName()),null,new FileInputStream(f));
-                return null;
-            }
+            File localMedia=resolveLocalSourceMedia(uri);
+            if(localMedia!=null)return response(200,"OK",mime(localMedia.getName()),null,new FileInputStream(localMedia));
             if(!HOST.equalsIgnoreCase(host))return null;
             String path=normalize(uri.getPath());if(path==null)return notFound();
             if(path.equals("/")||path.equals("/index.html")||path.equals("/medipharm/")||path.startsWith("/medipharm/?"))return asset("web/index.html","text/html");
@@ -83,7 +83,26 @@ public final class LocalContentServer {
     private static WebResourceResponse notFound(){return response(404,"Not Found","text/plain","UTF-8",text("Not Found"));}
     private static ByteArrayInputStream text(String s){return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));}
     private static WebResourceResponse response(int status,String reason,String mime,String encoding,InputStream in){Map<String,String>h=new HashMap<>();h.put("Cache-Control","no-store");h.put("X-Content-Type-Options","nosniff");h.put("Access-Control-Allow-Origin",ORIGIN);h.put("Content-Security-Policy","default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; connect-src 'self' https:; font-src 'self' https: data:; object-src 'none'; base-uri 'self'");return new WebResourceResponse(mime,encoding,status,reason,h,in);}
-    private static boolean isSourceMedia(Uri uri){String last=uri.getLastPathSegment();return last!=null&&last.matches("(?i)mcr-source-[a-f0-9]{64}\\.(png|jpg|jpeg|gif|webp)");}
+    private File resolveLocalSourceMedia(Uri uri){
+        String last=uri==null?null:uri.getLastPathSegment();
+        if(last==null)return null;
+        Matcher m=SOURCE_MEDIA_PATTERN.matcher(last);
+        if(!m.matches())return null;
+        String sha=m.group(1).toLowerCase(Locale.ROOT);
+        File dir=new File(runtime.getActiveDir(),"media");
+        if(!dir.isDirectory())return null;
+        String[] exts=new String[]{"jpg","jpeg","png","gif","webp"};
+        for(String ext:exts){
+            File f=new File(dir,"mcr-source-"+sha+"."+ext);
+            if(f.isFile())return f;
+        }
+        File[] files=dir.listFiles();
+        if(files!=null){
+            String prefix=("mcr-source-"+sha+".").toLowerCase(Locale.ROOT);
+            for(File f:files)if(f.isFile()&&f.getName().toLowerCase(Locale.ROOT).startsWith(prefix))return f;
+        }
+        return null;
+    }
     private static String normalize(String p){if(p==null||p.contains("..")||p.contains("\\")||p.indexOf('\0')>=0)return null;String x=p.startsWith("/")?p:"/"+p;while(x.contains("//"))x=x.replace("//","/");return x;}
     private static String encoding(String n){String l=n.toLowerCase(Locale.ROOT);if(l.matches(".*\\.(png|jpg|jpeg|gif|webp|woff|woff2)$"))return null;return"UTF-8";}
     private static String mime(String n){String l=n.toLowerCase(Locale.ROOT);if(l.endsWith(".html"))return"text/html";if(l.endsWith(".css"))return"text/css";if(l.endsWith(".js"))return"application/javascript";if(l.endsWith(".json"))return"application/json";if(l.endsWith(".png"))return"image/png";if(l.endsWith(".jpg")||l.endsWith(".jpeg"))return"image/jpeg";if(l.endsWith(".gif"))return"image/gif";if(l.endsWith(".webp"))return"image/webp";if(l.endsWith(".woff2"))return"font/woff2";if(l.endsWith(".woff"))return"font/woff";return"application/octet-stream";}
