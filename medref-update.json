@@ -1,0 +1,10 @@
+{
+  "schema": "medref-app-update/v1",
+  "versionCode": 10004,
+  "versionName": "1.0.4",
+  "minimumAndroidApi": 31,
+  "downloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.4.apk",
+  "sha256": "cd90760c27ac4ad85fabb80aa7ac434b98c5382942f1325b08739de35f9b7069",
+  "bytes": 301335,
+  "release": "Foldable Insets & App Update Check Hotfix"
+}
