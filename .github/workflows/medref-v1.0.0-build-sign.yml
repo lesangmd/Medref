@@ -1,0 +1,93 @@
+name: Build and Sign MedRef v1.0.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip'
+      - '.github/workflows/medref-v1.0.0-build-sign.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip
+          sha256sum MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip
+          rm -rf candidate-src && mkdir candidate-src
+          unzip -q MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip -d candidate-src
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Restore MedRef signing key
+        shell: bash
+        env:
+          MEDREF_KEYSTORE_B64: ${{ secrets.MEDREF_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$MEDREF_KEYSTORE_B64"
+          mkdir -p signing
+          printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks
+          echo "MEDREF_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/medref-production.jks" >> "$GITHUB_ENV"
+      - name: Static QA
+        working-directory: candidate-src/MedRef-Android-v1.0.0-offline-first
+        run: |
+          python3 tools/qa_medref_v100.py
+          node --check app/src/main/assets/web/assets/offline-bootstrap.js
+          node --check app/src/main/assets/web/assets/mcr-app.js
+          node --check app/src/main/assets/web/assets/mtp-app.js
+          node --check app/src/main/assets/web/assets/nah-icd10.js
+      - name: Build signed release APK
+        working-directory: candidate-src/MedRef-Android-v1.0.0-offline-first
+        env:
+          MEDREF_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_KEYSTORE_PASSWORD }}
+          MEDREF_KEY_ALIAS: ${{ secrets.MEDREF_KEY_ALIAS }}
+          MEDREF_KEY_PASSWORD: ${{ secrets.MEDREF_KEY_PASSWORD }}
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=candidate-src/MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release/app-release.apk
+          test -f "$APK"
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee APK-SIGNATURE.txt
+          "$AAPT" dump badging "$APK" | tee APK-BADGING.txt
+          grep -q "package: name='com.medipharm.medref'" APK-BADGING.txt
+          grep -q "versionName='1.0.0'" APK-BADGING.txt
+          mkdir -p dist
+          cp "$APK" dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk
+          sha256sum dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk | tee dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-v1.0.0-OFFLINE-FIRST-signed
+          path: |
+            dist/*
+            APK-SIGNATURE.txt
+            APK-BADGING.txt
