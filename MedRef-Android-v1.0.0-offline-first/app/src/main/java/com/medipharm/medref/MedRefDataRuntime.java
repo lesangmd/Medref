@@ -210,33 +210,13 @@ public final class MedRefDataRuntime {
             boolean allReusable=true;
             for(JSONObject item:chunk){
                 MediaDescriptor d=mediaDescriptor(item);
-                File reusable=findReusableMedia(d.fileName,d.sha);
-                if(reusable!=null){copyFile(reusable,new File(mediaDir,d.fileName));progress.advance("media");}
-                else {allReusable=false;break;}
-            }
-            if(allReusable)continue;
-
-            // Re-evaluate the whole chunk after the early probe so progress is counted exactly once.
-            for(JSONObject item:chunk){
-                MediaDescriptor d=mediaDescriptor(item);
                 File target=new File(mediaDir,d.fileName);
-                if(target.isFile() && d.sha.equals(sha256(target)))continue;
+                if(target.isFile()&&d.sha.equals(sha256(target)))continue;
                 File reusable=findReusableMedia(d.fileName,d.sha);
-                if(reusable!=null)copyFile(reusable,target);
+                if(reusable!=null)copyFile(reusable,target); else allReusable=false;
             }
-            List<JSONObject> missing=new ArrayList<>();
-            for(JSONObject item:chunk){
-                MediaDescriptor d=mediaDescriptor(item);
-                File target=new File(mediaDir,d.fileName);
-                if(!(target.isFile() && d.sha.equals(sha256(target))))missing.add(item);
-            }
-            if(missing.isEmpty()){
-                // The initial probe may have stopped before counting all reusable rows.
-                for(JSONObject item:chunk){
-                    MediaDescriptor d=mediaDescriptor(item);
-                    File target=new File(mediaDir,d.fileName);
-                    if(target.isFile())progress.advance("media");
-                }
+            if(allReusable){
+                for(JSONObject item:chunk)progress.advance("media");
                 continue;
             }
 
@@ -260,17 +240,21 @@ public final class MedRefDataRuntime {
                 if(entry.isDirectory()||"bundle-manifest.json".equals(name)){zin.closeEntry();continue;}
                 if(name.contains("/")||name.contains("\\")||name.contains(".."))throw new SecurityException("Media bundle chứa đường dẫn không hợp lệ.");
                 MediaDescriptor d=expected.get(name);if(d==null){zin.closeEntry();continue;}
+                File target=new File(mediaDir,d.fileName);
+                if(target.isFile()&&d.sha.equals(sha256(target))){
+                    counted.add(d.fileName);progress.advance("media");zin.closeEntry();continue;
+                }
                 File cacheTarget=new File(mediaCache,d.fileName);
                 boolean valid=cacheTarget.isFile()&&d.sha.equals(sha256(cacheTarget));
                 if(!valid){
                     File tmp=new File(mediaCache,d.fileName+".part");
                     try(FileOutputStream raw=new FileOutputStream(tmp);BufferedOutputStream out=new BufferedOutputStream(raw)){
-                        byte[] buf=new byte[64*1024];int n;while((n=zin.read(buf))!=-1)out.write(buf,0,n);out.flush();raw.getFD().sync();
+                        byte[] buf=new byte[128*1024];int n;while((n=zin.read(buf))!=-1)out.write(buf,0,n);out.flush();raw.getFD().sync();
                     }
                     if(!d.sha.equals(sha256(tmp))){tmp.delete();throw new SecurityException("SHA-256 media không khớp: "+d.fileName);}
                     Files.move(tmp.toPath(),cacheTarget.toPath(),StandardCopyOption.REPLACE_EXISTING);
                 }
-                copyFile(cacheTarget,new File(mediaDir,d.fileName));
+                copyFile(cacheTarget,target);
                 counted.add(d.fileName);progress.advance("media");
                 zin.closeEntry();
             }
