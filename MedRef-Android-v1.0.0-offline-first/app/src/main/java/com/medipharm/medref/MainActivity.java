@@ -102,13 +102,15 @@ public final class MainActivity extends Activity {
         AppUpdateJobService.schedule(this);
         if(dataRuntime.hasValidOfflineSession()){
             loadLocalApp();
-            if(networkAvailable()&&isMemberAuthenticated())main.postDelayed(()->syncData(false),1800L);
+            if(networkAvailable()&&isMemberAuthenticated())main.postDelayed(()->syncData(false),2200L);
             return;
         }
         if(networkAvailable()&&isMemberAuthenticated()){
-            syncData(true);return;
+            if(dataRuntime.hasActiveData())reauthenticateAndOpen();
+            else syncData(true);
+            return;
         }
-        String msg=dataRuntime.hasActiveData()?"Phiên xác thực offline đã hết hạn. Đăng nhập MEDIPHARM để tiếp tục sử dụng dữ liệu đã tải.":"Đăng nhập MEDIPHARM lần đầu để tải đầy đủ dữ liệu phác đồ, quy trình, ICD-10 và bảng/hình nguồn về thiết bị.";
+        String msg=dataRuntime.hasActiveData()?"Phiên xác thực offline đã hết hạn. Đăng nhập MEDIPHARM để tiếp tục sử dụng ngay dữ liệu đã tải.":"Đăng nhập MEDIPHARM lần đầu để tải đầy đủ dữ liệu phác đồ, quy trình, ICD-10 và bảng/hình nguồn về thiết bị.";
         showGate("MedRef",msg,"Đăng nhập",v->showEmbeddedLogin(),"Thử lại",v->afterRuntimeReady());
     }
 
@@ -213,6 +215,32 @@ public final class MainActivity extends Activity {
         if(isLocal(uri))return false;
         if("https".equals(scheme)){if(isSachYHoc(uri)&&isLoginPath(uri.getPath())){showEmbeddedLogin();return true;}openExternal(uri);return true;}
         openExternal(uri);return true;
+    }
+
+    private void reauthenticateAndOpen(){
+        if(syncRunning)return;
+        if(!networkAvailable()){showGate("Chưa thể xác thực","Cần kết nối Internet để xác thực lại tài khoản MEDIPHARM.","Thử lại",v->reauthenticateAndOpen(),"Đăng nhập lại",v->showEmbeddedLogin());return;}
+        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
+        syncRunning=true;
+        showGate("Đang xác thực tài khoản","MedRef đang xác thực quyền truy cập. Dữ liệu đã tải trên thiết bị sẽ được giữ nguyên.",null,null,null,null);
+        new Thread(()->{
+            try{
+                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
+                dataRuntime.reauthenticate(cookie,nonce);
+                main.post(()->{
+                    syncRunning=false;
+                    loadLocalApp();
+                    Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();
+                    if(networkAvailable())main.postDelayed(()->syncData(false),2200L);
+                });
+            }catch(Exception e){
+                Log.e(TAG,"reauth",e);
+                main.post(()->{
+                    syncRunning=false;
+                    showGate("Chưa thể xác thực tài khoản",safe(e),"Thử lại",v->reauthenticateAndOpen(),"Đăng nhập lại",v->showEmbeddedLogin());
+                });
+            }
+        },"MedRef-reauth").start();
     }
 
     private void syncData(boolean visible){
@@ -348,7 +376,8 @@ public final class MainActivity extends Activity {
         try{if(credentialStore!=null){if(pendingRemember)credentialStore.save(pendingLoginUser,pendingLoginPassword);else credentialStore.clear();}}catch(Exception e){Log.w(TAG,"credential store",e);}
         pendingLoginPassword="";
         Dialog d=loginDialog;loginDialog=null;if(d!=null&&d.isShowing())d.dismiss();
-        Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();syncData(true);
+        if(dataRuntime!=null&&dataRuntime.hasActiveData())reauthenticateAndOpen();
+        else syncData(true);
     });}
 
     private void setLoginStatus(String message){setLoginStatus(message,true);}
