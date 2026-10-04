@@ -1,0 +1,67 @@
+name: Build MedRef v1.0.4 Diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-v1.0.4-diagnostic.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+      - name: Static QA
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        run: |
+          set -euo pipefail
+          python3 tools/qa_medref_v100.py
+          node --check app/src/main/assets/web/assets/offline-bootstrap.js
+          node --check app/src/main/assets/web/assets/mcr-app.js
+          node --check app/src/main/assets/web/assets/mtp-app.js
+          node --check app/src/main/assets/web/assets/nah-icd10.js
+      - name: Compile release
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Stage diagnostic artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostic-tools/lib diagnostic-tools/lib64
+          APK="$(find MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" diagnostic-tools/MedRef-v1.0.4-FOLDABLE-INSETS-UPDATE-CHECK-unsigned.apk
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" diagnostic-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" diagnostic-tools/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" diagnostic-tools/lib/
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib64/libc++.so" diagnostic-tools/lib64/
+          sha256sum diagnostic-tools/MedRef-v1.0.4-FOLDABLE-INSETS-UPDATE-CHECK-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-v1.0.4-unsigned-diagnostic
+          path: diagnostic-tools/
