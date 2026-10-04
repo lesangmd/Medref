@@ -8,8 +8,8 @@ android {
         applicationId 'com.medipharm.medref'
         minSdk 31
         targetSdk 35
-        versionCode 10004
-        versionName '1.0.4'
+        versionCode 10005
+        versionName '1.0.5'
         buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://www.sachyhoc.com/wp-json/medipharm-reference/v1/medref/app-version"'
     }
 
