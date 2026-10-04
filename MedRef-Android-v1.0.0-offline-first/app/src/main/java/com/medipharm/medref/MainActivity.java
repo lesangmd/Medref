@@ -377,7 +377,21 @@ public final class MainActivity extends Activity {
     private void logout(){try{CookieManager cm=CookieManager.getInstance();String c=memberCookie();for(String part:c.split(";")){int eq=part.indexOf('=');String name=(eq>=0?part.substring(0,eq):part).trim();String low=name.toLowerCase(Locale.ROOT);if(low.startsWith("wordpress_logged_in_")||low.startsWith("wordpress_sec_")||(low.startsWith("wordpress_")&&!low.startsWith("wordpress_test_cookie"))){String expired=name+"=; Max-Age=0; Path=/; Secure; SameSite=Lax";cm.setCookie("https://www.sachyhoc.com/",expired);cm.setCookie("https://sachyhoc.com/",expired);}}cm.flush();if(dataRuntime!=null)dataRuntime.clearSession();showGate("MedRef","Đã đăng xuất. Dữ liệu offline vẫn được giữ trên thiết bị.","Đăng nhập",v->showEmbeddedLogin(),null,null);}catch(Exception e){Toast.makeText(this,"Chưa thể đăng xuất.",Toast.LENGTH_SHORT).show();}}
 
     private void confirmRollback(){if(dataRuntime==null||!dataRuntime.hasRollback()){Toast.makeText(this,"Không có bản dữ liệu trước để khôi phục.",Toast.LENGTH_SHORT).show();return;}new AlertDialog.Builder(this).setTitle("Khôi phục dữ liệu trước").setMessage("MedRef sẽ đổi bộ dữ liệu hiện tại với previous-good trên thiết bị.").setNegativeButton("Hủy",null).setPositiveButton("Khôi phục",(d,w)->{try{dataRuntime.rollback();if(localServer!=null)localServer.reload();loadLocalApp();}catch(Exception e){Toast.makeText(this,"Khôi phục không thành công.",Toast.LENGTH_LONG).show();}}).show();}
-    private void showAbout(){String data=dataRuntime==null?"—":dataRuntime.getDataVersion();String session=dataRuntime!=null&&dataRuntime.hasValidOfflineSession()?"Đang hiệu lực":"Cần xác thực";new AlertDialog.Builder(this).setTitle("MedRef").setMessage("MEDIPHARM Clinical Reference\n\nỨng dụng Android: "+BuildConfig.VERSION_NAME+"\nDữ liệu: "+data+"\nPhiên offline: "+session+"\n\nOffline-First · dữ liệu cục bộ · đồng bộ nền · rollback previous-good.").setPositiveButton("Đóng",null).show();}
+    private void showAbout(){
+        String message="MedRef là ứng dụng tham chiếu lâm sàng của MEDIPHARM dành cho nhân viên y tế.\n\n"
+                +"• Tra cứu Phác đồ điều trị theo chuyên khoa và bệnh lý.\n"
+                +"• Tra cứu Quy trình chuyên môn trong cùng một giao diện.\n"
+                +"• Tìm kiếm ICD-10 và liên kết mã bệnh với phác đồ liên quan.\n"
+                +"• Lưu nội dung, hình ảnh, bảng và lược đồ cần thiết trên thiết bị để tiếp tục tra cứu khi không có Internet.\n"
+                +"• Khi có kết nối mạng, MedRef tự kiểm tra và đồng bộ dữ liệu mới để thư viện luôn được cập nhật.\n\n"
+                +"Tài khoản và quyền truy cập được quản lý bởi hệ thống Thành viên MEDIPHARM.\n\n"
+                +"Phiên bản ứng dụng: "+BuildConfig.VERSION_NAME;
+        new AlertDialog.Builder(this)
+                .setTitle("Giới thiệu MedRef")
+                .setMessage(message)
+                .setPositiveButton("Đóng",null)
+                .show();
+    }
 
     private void checkAppUpdate(boolean userVisible){new Thread(()->{
         try{
