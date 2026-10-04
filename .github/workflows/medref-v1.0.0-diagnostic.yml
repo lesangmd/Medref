@@ -64,6 +64,8 @@ jobs:
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" diagnostic-tools/lib/
+          mkdir -p diagnostic-tools/lib64
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib64/libc++.so" diagnostic-tools/lib64/
           sha256sum diagnostic-tools/MedRef-v1.0.0-OFFLINE-FIRST-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
 
       - name: Upload diagnostic artifact
