@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip'
+      - 'MedRef-Android-v1.0.0-offline-first/**'
       - '.github/workflows/medref-v1.0.0-build-sign.yml'
 
 permissions:
@@ -19,16 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify source bundle
+      - name: Verify canonical source tree
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE="MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip"
-          test -f "$SOURCE"
-          sha256sum "$SOURCE" | tee SOURCE-SHA256.txt
-          rm -rf candidate-src && mkdir candidate-src
-          unzip -q "$SOURCE" -d candidate-src
-          test -d candidate-src/MedRef-Android-v1.0.0-offline-first
+          ROOT="MedRef-Android-v1.0.0-offline-first"
+          test -d "$ROOT/app/src/main/java/com/medipharm/medref"
+          test -f "$ROOT/app/build.gradle"
+          sha256sum "$ROOT/app/src/main/java/com/medipharm/medref/LocalContentServer.java" | tee SOURCE-SHA256.txt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -51,7 +49,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Static QA
-        working-directory: candidate-src/MedRef-Android-v1.0.0-offline-first
+        working-directory: MedRef-Android-v1.0.0-offline-first
         run: |
           set -euo pipefail
           python3 tools/qa_medref_v100.py
@@ -61,7 +59,7 @@ jobs:
           node --check app/src/main/assets/web/assets/nah-icd10.js
 
       - name: Compile unsigned diagnostic release
-        working-directory: candidate-src/MedRef-Android-v1.0.0-offline-first
+        working-directory: MedRef-Android-v1.0.0-offline-first
         run: |
           set -euo pipefail
           gradle --no-daemon --stacktrace :app:assembleRelease
@@ -81,7 +79,7 @@ jobs:
           echo "MEDREF_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/medref-production.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
-        working-directory: candidate-src/MedRef-Android-v1.0.0-offline-first
+        working-directory: MedRef-Android-v1.0.0-offline-first
         env:
           MEDREF_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_KEYSTORE_PASSWORD }}
           MEDREF_KEY_ALIAS: ${{ secrets.MEDREF_KEY_ALIAS }}
@@ -97,7 +95,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APK=candidate-src/MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release/app-release.apk
+          APK=MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release/app-release.apk
           test -f "$APK"
           export ANDROID_HOME=/usr/local/lib/android/sdk
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt2"
