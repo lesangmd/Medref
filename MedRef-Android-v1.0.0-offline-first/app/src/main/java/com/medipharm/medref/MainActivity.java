@@ -108,26 +108,56 @@ public final class MainActivity extends Activity {
     }
 
     private void buildShell(){
-        root=new FrameLayout(this);root.setBackgroundColor(Color.WHITE);
+        root=new FrameLayout(this);root.setBackgroundColor(Color.rgb(244,249,250));
         webContainer=new FrameLayout(this);root.addView(webContainer,new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
-        gate=new LinearLayout(this);gate.setOrientation(LinearLayout.VERTICAL);gate.setGravity(Gravity.CENTER);gate.setPadding(dp(28),dp(28),dp(28),dp(28));gate.setBackgroundColor(Color.WHITE);
-        gateTitle=new TextView(this);gateTitle.setTextSize(24);gateTitle.setTextColor(Color.rgb(18,37,58));gateTitle.setGravity(Gravity.CENTER);gateTitle.setTypeface(gateTitle.getTypeface(),android.graphics.Typeface.BOLD);gate.addView(gateTitle,new LinearLayout.LayoutParams(-1,-2));
-        gateMessage=new TextView(this);gateMessage.setTextSize(15);gateMessage.setTextColor(Color.rgb(92,111,124));gateMessage.setGravity(Gravity.CENTER);LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,-2);mp.setMargins(0,dp(12),0,dp(16));gate.addView(gateMessage,mp);
-        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setVisibility(View.GONE);gate.addView(progress,new LinearLayout.LayoutParams(-1,dp(6)));
-        progressText=new TextView(this);progressText.setTextSize(13);progressText.setTextColor(Color.rgb(92,111,124));progressText.setGravity(Gravity.CENTER);progressText.setVisibility(View.GONE);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.setMargins(0,dp(8),0,dp(8));gate.addView(progressText,pp);
-        primaryButton=new Button(this);primaryButton.setAllCaps(false);gate.addView(primaryButton,new LinearLayout.LayoutParams(-1,-2));
-        secondaryButton=new Button(this);secondaryButton.setAllCaps(false);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.setMargins(0,dp(8),0,0);gate.addView(secondaryButton,sp);
+
+        gate=new LinearLayout(this);gate.setOrientation(LinearLayout.VERTICAL);gate.setGravity(Gravity.CENTER);gate.setPadding(dp(30),dp(34),dp(30),dp(34));
+        GradientDrawable shellBg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(238,249,249),Color.rgb(248,250,252),Color.rgb(233,242,247)});gate.setBackground(shellBg);
+
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setGravity(Gravity.CENTER);card.setPadding(dp(26),dp(28),dp(26),dp(26));
+        GradientDrawable cardBg=new GradientDrawable();cardBg.setColor(Color.WHITE);cardBg.setCornerRadius(dp(26));cardBg.setStroke(dp(1),Color.rgb(215,229,232));card.setBackground(cardBg);
+        gate.addView(card,new LinearLayout.LayoutParams(-1,-2));
+
+        TextView mark=new TextView(this);mark.setText("M");mark.setTextSize(24);mark.setGravity(Gravity.CENTER);mark.setTextColor(Color.WHITE);mark.setTypeface(mark.getTypeface(),android.graphics.Typeface.BOLD);
+        GradientDrawable markBg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(13,126,136),Color.rgb(33,157,159)});markBg.setCornerRadius(dp(18));mark.setBackground(markBg);
+        card.addView(mark,new LinearLayout.LayoutParams(dp(58),dp(58)));
+
+        gateTitle=new TextView(this);gateTitle.setTextSize(25);gateTitle.setTextColor(Color.rgb(18,37,58));gateTitle.setGravity(Gravity.CENTER);gateTitle.setTypeface(gateTitle.getTypeface(),android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.setMargins(0,dp(16),0,0);card.addView(gateTitle,tp);
+
+        gateMessage=new TextView(this);gateMessage.setTextSize(15);gateMessage.setTextColor(Color.rgb(92,111,124));gateMessage.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,-2);mp.setMargins(0,dp(10),0,dp(18));card.addView(gateMessage,mp);
+
+        progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(100);progress.setVisibility(View.GONE);
+        LinearLayout.LayoutParams pg=new LinearLayout.LayoutParams(-1,dp(8));pg.setMargins(0,dp(2),0,0);card.addView(progress,pg);
+
+        progressText=new TextView(this);progressText.setTextSize(13);progressText.setTextColor(Color.rgb(13,126,136));progressText.setGravity(Gravity.CENTER);progressText.setVisibility(View.GONE);progressText.setTypeface(progressText.getTypeface(),android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,-2);pp.setMargins(0,dp(10),0,dp(12));card.addView(progressText,pp);
+
+        primaryButton=new Button(this);primaryButton.setAllCaps(false);primaryButton.setTextSize(16);primaryButton.setTextColor(Color.WHITE);primaryButton.setTypeface(primaryButton.getTypeface(),android.graphics.Typeface.BOLD);primaryButton.setBackground(buttonBackground(Color.rgb(13,126,136),0));
+        card.addView(primaryButton,new LinearLayout.LayoutParams(-1,dp(54)));
+
+        secondaryButton=new Button(this);secondaryButton.setAllCaps(false);secondaryButton.setTextSize(15);secondaryButton.setTextColor(Color.rgb(13,126,136));secondaryButton.setBackground(buttonBackground(Color.WHITE,Color.rgb(13,126,136)));
+        LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,dp(52));sp.setMargins(0,dp(10),0,0);card.addView(secondaryButton,sp);
+
         root.addView(gate,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
     }
 
     private void showGate(String title,String message,String primary,View.OnClickListener primaryAction,String secondary,View.OnClickListener secondaryAction){
         gate.setVisibility(View.VISIBLE);webContainer.setVisibility(View.GONE);gateTitle.setText(title);gateMessage.setText(message);progress.setVisibility(View.GONE);progressText.setVisibility(View.GONE);
+        primaryButton.setEnabled(true);primaryButton.setAlpha(1f);primaryButton.setBackground(buttonBackground(Color.rgb(13,126,136),0));
         if(primary!=null){primaryButton.setText(primary);primaryButton.setOnClickListener(primaryAction);primaryButton.setVisibility(View.VISIBLE);}else primaryButton.setVisibility(View.GONE);
         if(secondary!=null){secondaryButton.setText(secondary);secondaryButton.setOnClickListener(secondaryAction);secondaryButton.setVisibility(View.VISIBLE);}else secondaryButton.setVisibility(View.GONE);
     }
 
     private void showSyncProgress(int pct,String msg){
-        gate.setVisibility(View.VISIBLE);webContainer.setVisibility(View.GONE);gateTitle.setText("Đang chuẩn bị MedRef Offline");gateMessage.setText("Lần đầu có thể mất vài phút tùy kích thước thư viện và tốc độ mạng.");primaryButton.setVisibility(View.GONE);secondaryButton.setVisibility(View.GONE);progress.setVisibility(View.VISIBLE);progress.setProgress(pct);progressText.setVisibility(View.VISIBLE);progressText.setText(msg+"  "+pct+"%");
+        gate.setVisibility(View.VISIBLE);webContainer.setVisibility(View.GONE);
+        gateTitle.setText("Đang đồng bộ dữ liệu");
+        gateMessage.setText("MedRef đang chuẩn bị dữ liệu phác đồ, quy trình, ICD-10 và hình/bảng nguồn để sử dụng offline.");
+        progress.setVisibility(View.VISIBLE);progress.setProgress(Math.max(1,pct));
+        progressText.setVisibility(View.VISIBLE);progressText.setText(msg+"  ·  "+pct+"%");
+        primaryButton.setVisibility(View.VISIBLE);primaryButton.setEnabled(false);primaryButton.setAlpha(.88f);primaryButton.setText("↻  Đang đồng bộ dữ liệu…");primaryButton.setBackground(buttonBackground(Color.rgb(16,143,150),0));
+        secondaryButton.setVisibility(View.GONE);
     }
 
     private void ensureWebView(){
