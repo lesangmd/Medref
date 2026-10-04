@@ -6,7 +6,9 @@ import android.app.Dialog;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
@@ -23,6 +25,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -82,6 +86,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
+        configureSystemBars();
         buildShell();
         credentialStore=new CredentialStore(this);
         new Thread(()->{
@@ -141,6 +146,29 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,dp(52));sp.setMargins(0,dp(10),0,0);card.addView(secondaryButton,sp);
 
         root.addView(gate,new FrameLayout.LayoutParams(-1,-1));setContentView(root);
+        applySystemInsets();
+    }
+
+    private void configureSystemBars(){
+        Window w=getWindow();
+        try{w.setStatusBarColor(Color.rgb(244,249,250));}catch(Throwable ignored){}
+        try{w.setNavigationBarColor(Color.rgb(244,249,250));}catch(Throwable ignored){}
+        try{
+            WindowInsetsController c=w.getInsetsController();
+            if(c!=null)c.setSystemBarsAppearance(
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+                    WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        }catch(Throwable ignored){}
+    }
+
+    private void applySystemInsets(){
+        if(root==null)return;
+        root.setOnApplyWindowInsetsListener((v,insets)->{
+            Insets safe=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+            v.setPadding(safe.left,safe.top,safe.right,safe.bottom);
+            return insets;
+        });
+        root.requestApplyInsets();
     }
 
     private void showGate(String title,String message,String primary,View.OnClickListener primaryAction,String secondary,View.OnClickListener secondaryAction){
@@ -351,8 +379,45 @@ public final class MainActivity extends Activity {
     private void confirmRollback(){if(dataRuntime==null||!dataRuntime.hasRollback()){Toast.makeText(this,"Không có bản dữ liệu trước để khôi phục.",Toast.LENGTH_SHORT).show();return;}new AlertDialog.Builder(this).setTitle("Khôi phục dữ liệu trước").setMessage("MedRef sẽ đổi bộ dữ liệu hiện tại với previous-good trên thiết bị.").setNegativeButton("Hủy",null).setPositiveButton("Khôi phục",(d,w)->{try{dataRuntime.rollback();if(localServer!=null)localServer.reload();loadLocalApp();}catch(Exception e){Toast.makeText(this,"Khôi phục không thành công.",Toast.LENGTH_LONG).show();}}).show();}
     private void showAbout(){String data=dataRuntime==null?"—":dataRuntime.getDataVersion();String session=dataRuntime!=null&&dataRuntime.hasValidOfflineSession()?"Đang hiệu lực":"Cần xác thực";new AlertDialog.Builder(this).setTitle("MedRef").setMessage("MEDIPHARM Clinical Reference\n\nỨng dụng Android: "+BuildConfig.VERSION_NAME+"\nDữ liệu: "+data+"\nPhiên offline: "+session+"\n\nOffline-First · dữ liệu cục bộ · đồng bộ nền · rollback previous-good.").setPositiveButton("Đóng",null).show();}
 
-    private void checkAppUpdate(boolean userVisible){new Thread(()->{try{JSONObject j=fetchPublicJson(BuildConfig.APP_UPDATE_MANIFEST_URL);int remote=j.optInt("versionCode",BuildConfig.VERSION_CODE);String name=j.optString("versionName","");String url=j.optString("downloadUrl","");main.post(()->{if(remote>BuildConfig.VERSION_CODE){new AlertDialog.Builder(this).setTitle("Có phiên bản MedRef mới").setMessage("Phiên bản "+name+" đã sẵn sàng.").setNegativeButton("Để sau",null).setPositiveButton("Tải cập nhật",(d,w)->{if(url.startsWith("https://"))openExternal(Uri.parse(url));}).show();}else if(userVisible)Toast.makeText(this,"MedRef đang ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();});}catch(Exception e){if(userVisible)main.post(()->Toast.makeText(this,"Chưa thể kiểm tra phiên bản mới.",Toast.LENGTH_SHORT).show());}},"MedRef-app-update").start();}
-    private JSONObject fetchPublicJson(String u)throws Exception{HttpURLConnection c=(HttpURLConnection)new URL(u).openConnection();c.setConnectTimeout(6000);c.setReadTimeout(8000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);try{if(c.getResponseCode()!=200)throw new IllegalStateException("HTTP "+c.getResponseCode());StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(c.getInputStream()))){String line;while((line=r.readLine())!=null)b.append(line);}return new JSONObject(b.toString());}finally{c.disconnect();}}
+    private void checkAppUpdate(boolean userVisible){new Thread(()->{
+        try{
+            JSONObject j=fetchUpdateManifest();
+            int remote=j.optInt("versionCode",BuildConfig.VERSION_CODE);
+            String name=j.optString("versionName","");
+            String url=j.optString("downloadUrl","");
+            String sha=j.optString("sha256","");
+            main.post(()->{
+                if(remote>BuildConfig.VERSION_CODE){
+                    String msg="Phiên bản "+name+" đã sẵn sàng.";
+                    if(sha.matches("(?i)[a-f0-9]{64}"))msg+="\n\nSHA-256: "+sha;
+                    new AlertDialog.Builder(this).setTitle("Có phiên bản MedRef mới").setMessage(msg).setNegativeButton("Để sau",null)
+                            .setPositiveButton("Tải cập nhật",(d,w)->{if(url.startsWith("https://"))openExternal(Uri.parse(url));}).show();
+                }else if(userVisible)Toast.makeText(this,"MedRef đang ở phiên bản mới nhất ("+BuildConfig.VERSION_NAME+").",Toast.LENGTH_SHORT).show();
+            });
+        }catch(Exception e){
+            Log.w(TAG,"app update check",e);
+            if(userVisible)main.post(()->Toast.makeText(this,"Chưa thể kiểm tra phiên bản mới. Vui lòng kiểm tra kết nối mạng.",Toast.LENGTH_LONG).show());
+        }
+    },"MedRef-app-update").start();}
+
+    private JSONObject fetchUpdateManifest()throws Exception{
+        Exception first=null;
+        try{return fetchPublicJson(BuildConfig.APP_UPDATE_MANIFEST_URL);}
+        catch(Exception e){first=e;}
+        try{return fetchPublicJson("https://raw.githubusercontent.com/lesangmd/Medref/main/medref-update.json?ts="+System.currentTimeMillis());}
+        catch(Exception second){if(first!=null)second.addSuppressed(first);throw second;}
+    }
+
+    private JSONObject fetchPublicJson(String u)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)new URL(u).openConnection();
+        c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setInstanceFollowRedirects(true);
+        c.setRequestProperty("Accept","application/json");c.setRequestProperty("Cache-Control","no-cache");c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
+        try{
+            int status=c.getResponseCode();if(status!=200)throw new IllegalStateException("HTTP "+status);
+            StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(c.getInputStream()))){String line;while((line=r.readLine())!=null)b.append(line);}
+            JSONObject j=new JSONObject(b.toString());if(!j.has("versionCode")||!j.has("versionName"))throw new IllegalStateException("Manifest cập nhật không hợp lệ.");return j;
+        }finally{c.disconnect();}
+    }
 
     private void download(String url,String ua,String disposition,String mime){try{DownloadManager.Request r=new DownloadManager.Request(Uri.parse(url));r.setMimeType(mime);r.addRequestHeader("User-Agent",ua);String c=memberCookie();if(!c.isEmpty())r.addRequestHeader("Cookie",c);String name=URLUtil.guessFileName(url,disposition,mime);r.setTitle(name);r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,name);((DownloadManager)getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(r);}catch(Exception e){openExternal(Uri.parse(url));}}
     private boolean networkAvailable(){try{ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);Network n=cm.getActiveNetwork();if(n==null)return false;NetworkCapabilities c=cm.getNetworkCapabilities(n);return c!=null&&(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));}catch(Exception e){return false;}}
@@ -362,6 +427,11 @@ public final class MainActivity extends Activity {
     private void openExternal(Uri u){try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception ignored){}}
     private String safe(Throwable e){String m=e==null?"":e.getMessage();return(m==null||m.trim().isEmpty())?"Lỗi không xác định.":m;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+
+    @Override public void onConfigurationChanged(Configuration newConfig){
+        super.onConfigurationChanged(newConfig);
+        if(root!=null)root.post(this::applySystemInsets);
+    }
 
     @Override public void onBackPressed(){if(loginDialog!=null&&loginDialog.isShowing()){loginDialog.dismiss();return;}if(webView!=null&&webView.canGoBack()){webView.goBack();return;}super.onBackPressed();}
     @Override protected void onDestroy(){destroyLoginView();if(webView!=null){try{webView.destroy();}catch(Throwable ignored){}webView=null;}if(localServer!=null){localServer.close();localServer=null;}super.onDestroy();}
