@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.InputType;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -34,9 +35,12 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.URLUtil;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -55,7 +59,7 @@ public final class MainActivity extends Activity {
     private static final String START_URL=LocalContentServer.ORIGIN+"/index.html";
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
-    private static final String APP_UA=" MedRefAndroid/1.0.0 OfflineFirst";
+    private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OfflineFirst";
     private static final Pattern NONCE_RE=Pattern.compile("\\\"restNonce\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private final Handler main=new Handler(Looper.getMainLooper());
@@ -70,10 +74,16 @@ public final class MainActivity extends Activity {
     private volatile boolean syncRunning=false;
     private Dialog loginDialog;
     private WebView loginView;
+    private CredentialStore credentialStore;
+    private boolean loginAttemptInjected=false;
+    private String pendingLoginUser="",pendingLoginPassword="";
+    private boolean pendingRemember=false;
+    private TextView loginStatus;
 
     @Override protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
         buildShell();
+        credentialStore=new CredentialStore(this);
         new Thread(()->{
             try{
                 dataRuntime=new MedRefDataRuntime(this);dataRuntime.ensureReady();
@@ -167,18 +177,141 @@ public final class MainActivity extends Activity {
 
     @SuppressWarnings("SetJavaScriptEnabled") private void showEmbeddedLogin(){
         if(loginDialog!=null&&loginDialog.isShowing())return;
+        pendingLoginUser="";pendingLoginPassword="";pendingRemember=false;loginAttemptInjected=false;
+
         Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);d.setCanceledOnTouchOutside(true);loginDialog=d;
-        LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setPadding(dp(2),dp(2),dp(2),dp(2));GradientDrawable g=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(32,143,150),Color.rgb(225,242,242),Color.rgb(176,203,215)});g.setCornerRadius(dp(26));frame.setBackground(g);
-        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);GradientDrawable bg=new GradientDrawable();bg.setColor(Color.WHITE);bg.setCornerRadius(dp(24));card.setBackground(bg);frame.addView(card,new LinearLayout.LayoutParams(-1,-1));
-        FrameLayout header=new FrameLayout(this);header.setPadding(dp(20),dp(12),dp(8),dp(8));TextView title=new TextView(this);title.setText("Đăng nhập MEDIPHARM");title.setTextSize(20);title.setTextColor(Color.rgb(18,37,58));title.setTypeface(title.getTypeface(),android.graphics.Typeface.BOLD);header.addView(title,new FrameLayout.LayoutParams(-1,-2));TextView close=new TextView(this);close.setText("×");close.setTextSize(30);close.setGravity(Gravity.CENTER);FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(44),dp(44),Gravity.END|Gravity.TOP);header.addView(close,cp);close.setOnClickListener(v->d.dismiss());card.addView(header,new LinearLayout.LayoutParams(-1,-2));
-        FrameLayout wf=new FrameLayout(this);ProgressBar lp=new ProgressBar(this);wf.addView(lp,new FrameLayout.LayoutParams(dp(38),dp(38),Gravity.CENTER));loginView=new WebView(this);WebSettings s=loginView.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setUserAgentString(s.getUserAgentString()+APP_UA);CookieManager cm=CookieManager.getInstance();cm.setAcceptCookie(true);try{cm.setAcceptThirdPartyCookies(loginView,true);}catch(Throwable ignored){}
-        loginView.setWebChromeClient(new WebChromeClient());loginView.setWebViewClient(new WebViewClient(){@Override public void onPageStarted(WebView v,String u,android.graphics.Bitmap f){lp.setVisibility(View.VISIBLE);}@Override public void onPageFinished(WebView v,String u){lp.setVisibility(View.GONE);try{CookieManager.getInstance().flush();}catch(Throwable ignored){}if(isMemberAuthenticated())completeLogin();}@Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest req){Uri t=req.getUrl();if(isMemberAuthenticated()){completeLogin();return true;}if(isSachYHoc(t)&&isLoginPath(t.getPath()))return false;if(isSachYHoc(t)){openExternal(t);return true;}openExternal(t);return true;}});
-        wf.addView(loginView,0,new FrameLayout.LayoutParams(-1,-1));LinearLayout.LayoutParams wfp=new LinearLayout.LayoutParams(-1,0,1f);wfp.setMargins(dp(8),0,dp(8),dp(10));card.addView(wf,wfp);d.setOnDismissListener(x->destroyLoginView());d.setContentView(frame);d.show();Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams a=w.getAttributes();a.dimAmount=.48f;w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);w.setLayout(Math.round(getResources().getDisplayMetrics().widthPixels*.94f),Math.round(getResources().getDisplayMetrics().heightPixels*.78f));w.setGravity(Gravity.CENTER);}
+        LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setPadding(dp(2),dp(2),dp(2),dp(2));
+        GradientDrawable edge=new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Color.rgb(15,131,139),Color.rgb(109,207,207),Color.rgb(207,230,239)});
+        edge.setCornerRadius(dp(28));frame.setBackground(edge);
+
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(22),dp(18),dp(22),dp(18));
+        GradientDrawable bg=new GradientDrawable();bg.setColor(Color.WHITE);bg.setCornerRadius(dp(26));card.setBackground(bg);frame.addView(card,new LinearLayout.LayoutParams(-1,-1));
+
+        FrameLayout header=new FrameLayout(this);
+        TextView title=new TextView(this);title.setText("Đăng nhập MEDIPHARM");title.setTextSize(23);title.setTextColor(Color.rgb(18,37,58));title.setTypeface(title.getTypeface(),android.graphics.Typeface.BOLD);
+        header.addView(title,new FrameLayout.LayoutParams(-1,-2));
+        TextView close=new TextView(this);close.setText("×");close.setTextSize(30);close.setTextColor(Color.rgb(100,110,118));close.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams cp=new FrameLayout.LayoutParams(dp(46),dp(46),Gravity.END|Gravity.TOP);header.addView(close,cp);close.setOnClickListener(v->d.dismiss());
+        card.addView(header,new LinearLayout.LayoutParams(-1,-2));
+
+        TextView intro=new TextView(this);intro.setText("Đăng nhập để đồng bộ và sử dụng MedRef Offline.");intro.setTextSize(14);intro.setTextColor(Color.rgb(92,111,124));
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,-2);ip.setMargins(0,dp(2),0,dp(14));card.addView(intro,ip);
+
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
+        LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);scroll.addView(form,new ScrollView.LayoutParams(-1,-2));
+        card.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
+
+        TextView ul=fieldLabel("Tên đăng nhập");form.addView(ul);
+        EditText username=new EditText(this);username.setSingleLine(true);username.setHint("Nhập tên đăng nhập");username.setTextSize(16);username.setPadding(dp(14),0,dp(14),0);username.setBackground(fieldBackground());
+        form.addView(username,new LinearLayout.LayoutParams(-1,dp(54)));
+
+        TextView pl=fieldLabel("Mật khẩu");LinearLayout.LayoutParams plp=new LinearLayout.LayoutParams(-1,-2);plp.setMargins(0,dp(14),0,dp(6));form.addView(pl,plp);
+        EditText password=new EditText(this);password.setSingleLine(true);password.setHint("Nhập mật khẩu");password.setTextSize(16);password.setPadding(dp(14),0,dp(14),0);
+        password.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);password.setBackground(fieldBackground());
+        form.addView(password,new LinearLayout.LayoutParams(-1,dp(54)));
+
+        CheckBox showPassword=new CheckBox(this);showPassword.setText("Hiện mật khẩu");showPassword.setTextSize(14);showPassword.setTextColor(Color.rgb(55,75,88));
+        showPassword.setOnCheckedChangeListener((b,checked)->{int pos=password.getSelectionStart();password.setInputType(InputType.TYPE_CLASS_TEXT|(checked?InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD:InputType.TYPE_TEXT_VARIATION_PASSWORD));password.setSelection(Math.max(0,Math.min(pos,password.length())));});
+        LinearLayout.LayoutParams shp=new LinearLayout.LayoutParams(-1,-2);shp.setMargins(0,dp(8),0,0);form.addView(showPassword,shp);
+
+        CheckBox remember=new CheckBox(this);remember.setText("Lưu thông tin đăng nhập");remember.setTextSize(14);remember.setTextColor(Color.rgb(55,75,88));form.addView(remember);
+
+        String[] saved=credentialStore==null?new String[]{"",""}:credentialStore.load();
+        if(!saved[0].isEmpty()){username.setText(saved[0]);password.setText(saved[1]);remember.setChecked(true);}
+
+        loginStatus=new TextView(this);loginStatus.setTextSize(13);loginStatus.setTextColor(Color.rgb(177,47,47));loginStatus.setVisibility(View.GONE);
+        LinearLayout.LayoutParams lsp=new LinearLayout.LayoutParams(-1,-2);lsp.setMargins(0,dp(8),0,dp(4));form.addView(loginStatus,lsp);
+
+        Button login=new Button(this);login.setAllCaps(false);login.setText("ĐĂNG NHẬP");login.setTextSize(16);login.setTextColor(Color.WHITE);login.setTypeface(login.getTypeface(),android.graphics.Typeface.BOLD);
+        login.setBackground(buttonBackground(Color.rgb(13,126,136),0));
+        LinearLayout.LayoutParams lbp=new LinearLayout.LayoutParams(-1,dp(54));lbp.setMargins(0,dp(10),0,dp(10));form.addView(login,lbp);
+
+        Button register=new Button(this);register.setAllCaps(false);register.setText("ĐĂNG KÝ TÀI KHOẢN");register.setTextSize(15);register.setTextColor(Color.rgb(13,126,136));register.setTypeface(register.getTypeface(),android.graphics.Typeface.BOLD);
+        register.setBackground(buttonBackground(Color.WHITE,Color.rgb(13,126,136)));form.addView(register,new LinearLayout.LayoutParams(-1,dp(52)));
+
+        TextView note=new TextView(this);note.setText("Quyền thành viên và phạm vi truy cập vẫn do hệ thống Membership MEDIPHARM quản lý.");note.setTextSize(12);note.setTextColor(Color.rgb(115,128,137));note.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams np=new LinearLayout.LayoutParams(-1,-2);np.setMargins(0,dp(12),0,0);form.addView(note,np);
+
+        loginView=new WebView(this);loginView.setAlpha(0.01f);loginView.setVisibility(View.INVISIBLE);
+        WebSettings ws=loginView.getSettings();ws.setJavaScriptEnabled(true);ws.setDomStorageEnabled(true);ws.setDatabaseEnabled(true);ws.setCacheMode(WebSettings.LOAD_DEFAULT);ws.setUserAgentString(ws.getUserAgentString()+APP_UA);
+        CookieManager cm=CookieManager.getInstance();cm.setAcceptCookie(true);try{cm.setAcceptThirdPartyCookies(loginView,true);}catch(Throwable ignored){}
+        loginView.setWebChromeClient(new WebChromeClient());
+        loginView.setWebViewClient(new WebViewClient(){
+            @Override public void onPageFinished(WebView v,String u){
+                try{CookieManager.getInstance().flush();}catch(Throwable ignored){}
+                if(isMemberAuthenticated()){completeLogin();return;}
+                if(!loginAttemptInjected)return;
+                Uri current=Uri.parse(u);
+                if(isSachYHoc(current)&&isLoginPath(current.getPath()))setLoginStatus("Tên đăng nhập hoặc mật khẩu chưa đúng. Vui lòng kiểm tra lại.");
+            }
+        });
+        LinearLayout.LayoutParams hidden=new LinearLayout.LayoutParams(1,1);card.addView(loginView,hidden);
+
+        login.setOnClickListener(v->{
+            String user=username.getText().toString().trim(),pass=password.getText().toString();
+            if(user.isEmpty()||pass.isEmpty()){setLoginStatus("Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.");return;}
+            pendingLoginUser=user;pendingLoginPassword=pass;pendingRemember=remember.isChecked();
+            login.setEnabled(false);login.setText("ĐANG XÁC THỰC…");setLoginStatus("Đang xác thực tài khoản MEDIPHARM…",false);
+            beginMembershipLogin(user,pass,remember.isChecked(),login);
+        });
+        register.setOnClickListener(v->openExternal(Uri.parse("https://www.sachyhoc.com/dangky")));
+
+        d.setOnDismissListener(x->destroyLoginView());d.setContentView(frame);d.show();
+        Window w=d.getWindow();if(w!=null){w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));WindowManager.LayoutParams a=w.getAttributes();a.dimAmount=.50f;w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);w.setLayout(Math.round(getResources().getDisplayMetrics().widthPixels*.92f),Math.min(Math.round(getResources().getDisplayMetrics().heightPixels*.76f),dp(720)));w.setGravity(Gravity.CENTER);}
+    }
+
+    private void beginMembershipLogin(String username,String password,boolean remember,Button loginButton){
+        loginAttemptInjected=false;
+        loginView.setWebViewClient(new WebViewClient(){
+            @Override public void onPageFinished(WebView v,String u){
+                try{CookieManager.getInstance().flush();}catch(Throwable ignored){}
+                if(isMemberAuthenticated()){completeLogin();return;}
+                if(!loginAttemptInjected){
+                    loginAttemptInjected=true;
+                    String js="(function(){var u=document.querySelector('input[name=\\"log\\"],input[name=\\"username\\"],input[name=\\"user_login\\"],input[type=\\"email\\"]');"+
+                            "var p=document.querySelector('input[name=\\"pwd\\"],input[name=\\"password\\"],input[type=\\"password\\"]');"+
+                            "if(!u||!p)return 'NO_FIELDS';u.value="+JSONObject.quote(username)+";p.value="+JSONObject.quote(password)+";"+
+                            "u.dispatchEvent(new Event('input',{bubbles:true}));p.dispatchEvent(new Event('input',{bubbles:true}));"+
+                            "var r=document.querySelector('input[name=\\"rememberme\\"],input[name*=\\"remember\\"]');if(r)r.checked="+(remember?"true":"false")+";"+
+                            "var f=p.form||u.form||document.querySelector('form');if(!f)return 'NO_FORM';var b=f.querySelector('button[type=\\"submit\\"],input[type=\\"submit\\"]');if(b)b.click();else f.submit();return 'SUBMITTED';})()";
+                    v.evaluateJavascript(js,value->{if(value!=null&&(value.contains("NO_FIELDS")||value.contains("NO_FORM"))){main.post(()->{loginButton.setEnabled(true);loginButton.setText("ĐĂNG NHẬP");setLoginStatus("Không tìm thấy biểu mẫu đăng nhập Membership. Vui lòng thử lại.");});}});
+                    return;
+                }
+                main.postDelayed(()->{
+                    if(!isMemberAuthenticated()){loginButton.setEnabled(true);loginButton.setText("ĐĂNG NHẬP");setLoginStatus("Đăng nhập chưa thành công. Vui lòng kiểm tra thông tin tài khoản.");}
+                },600L);
+            }
+        });
         loginView.loadUrl(LOGIN_URL+"?medref_embed=1&redirect_to="+Uri.encode(LOGIN_RETURN));
     }
 
-    private void completeLogin(){main.post(()->{try{CookieManager.getInstance().flush();}catch(Throwable ignored){}Dialog d=loginDialog;loginDialog=null;if(d!=null&&d.isShowing())d.dismiss();Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();syncData(true);});}
-    private void destroyLoginView(){WebView v=loginView;loginView=null;loginDialog=null;if(v!=null){try{v.stopLoading();}catch(Throwable ignored){}try{v.destroy();}catch(Throwable ignored){}}}
+    private void completeLogin(){main.post(()->{
+        try{CookieManager.getInstance().flush();}catch(Throwable ignored){}
+        try{if(credentialStore!=null){if(pendingRemember)credentialStore.save(pendingLoginUser,pendingLoginPassword);else credentialStore.clear();}}catch(Exception e){Log.w(TAG,"credential store",e);}
+        pendingLoginPassword="";
+        Dialog d=loginDialog;loginDialog=null;if(d!=null&&d.isShowing())d.dismiss();
+        Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();syncData(true);
+    });}
+
+    private void setLoginStatus(String message){setLoginStatus(message,true);}
+    private void setLoginStatus(String message,boolean error){
+        if(loginStatus==null)return;loginStatus.setText(message);loginStatus.setTextColor(error?Color.rgb(177,47,47):Color.rgb(13,126,136));loginStatus.setVisibility(View.VISIBLE);
+    }
+
+    private TextView fieldLabel(String text){
+        TextView v=new TextView(this);v.setText(text);v.setTextSize(14);v.setTextColor(Color.rgb(18,37,58));v.setTypeface(v.getTypeface(),android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.setMargins(0,0,0,dp(6));v.setLayoutParams(p);return v;
+    }
+
+    private GradientDrawable fieldBackground(){
+        GradientDrawable g=new GradientDrawable();g.setColor(Color.rgb(249,252,253));g.setCornerRadius(dp(14));g.setStroke(dp(1),Color.rgb(210,225,230));return g;
+    }
+
+    private GradientDrawable buttonBackground(int fill,int stroke){
+        GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(16));if(stroke!=0)g.setStroke(dp(1),stroke);return g;
+    }
+
+    private void destroyLoginView(){WebView v=loginView;loginView=null;loginStatus=null;loginAttemptInjected=false;if(v!=null){try{v.stopLoading();}catch(Throwable ignored){}try{v.destroy();}catch(Throwable ignored){}}}
 
     private boolean isMemberAuthenticated(){String cookies=memberCookie();if(cookies.isEmpty())return false;for(String part:cookies.split(";")){int eq=part.indexOf('=');String name=(eq>=0?part.substring(0,eq):part).trim().toLowerCase(Locale.ROOT);if(name.startsWith("wordpress_logged_in_")||name.startsWith("wordpress_sec_")||(name.startsWith("wordpress_")&&!name.startsWith("wordpress_test_cookie")))return true;}return false;}
     private String memberCookie(){try{String c=CookieManager.getInstance().getCookie(MedRefDataRuntime.REMOTE_ROOT+"/");return c==null?"":c;}catch(Throwable e){return"";}}
