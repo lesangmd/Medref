@@ -8,9 +8,9 @@ android {
         applicationId 'com.medipharm.medref'
         minSdk 31
         targetSdk 35
-        versionCode 10003
-        versionName '1.0.3'
-        buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/lesangmd/medref-releases/main/medref-update.json"'
+        versionCode 10004
+        versionName '1.0.4'
+        buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://www.sachyhoc.com/wp-json/medipharm-reference/v1/medref/app-version"'
     }
 
     def releaseKeystorePath = System.getenv('MEDREF_KEYSTORE_PATH')
