@@ -101,16 +101,44 @@ public final class MedRefDataRuntime {
         return fetchJson(new URL(OFFLINE_BASE+"manifest"),cookie,nonce);
     }
 
+    public synchronized JSONObject reauthenticate(String cookie,String nonce) throws Exception {
+        JSONObject session=fetchJson(new URL(OFFLINE_BASE+"session"),cookie,nonce);
+        if(!session.optBoolean("authenticated",false)) throw new SecurityException("Phiên MEDIPHARM chưa được xác thực.");
+        markAuthVerified();
+        return session;
+    }
+
     public synchronized boolean syncIfChanged(String cookie, String nonce, ProgressListener listener) throws Exception {
         JSONObject remote=fetchRemoteManifest(cookie,nonce);
         markAuthVerified();
-        String wanted=remote.optString("data_version","");
-        if(hasActiveData() && wanted.equals(getDataVersion())) {
-            JSONObject local=readJson(new File(active,"data-manifest.json"));
-            int remoteMedia=remote.optJSONObject("datasets")==null?-1:remote.optJSONObject("datasets").optJSONObject("media")==null?-1:remote.optJSONObject("datasets").optJSONObject("media").optInt("count",-1);
-            int localMedia=local.optJSONObject("datasets")==null?-2:local.optJSONObject("datasets").optJSONObject("media")==null?-2:local.optJSONObject("datasets").optJSONObject("media").optInt("count",-2);
-            if(remoteMedia>=0 && remoteMedia==localMedia) return false;
+        if(!hasActiveData()){
+            hydrateWithManifest(remote,cookie,nonce,listener);
+            return true;
         }
+
+        JSONObject local=readJson(new File(active,"data-manifest.json"));
+        String wanted=remote.optString("data_version","");
+        String localVersion=local.optString("data_version","");
+        String legacy=remote.optString("legacy_data_version","");
+        boolean clinicalSame=wanted.equals(localVersion)||(!legacy.isEmpty()&&legacy.equals(localVersion));
+
+        String remoteMedia=remote.optString("media_catalog_sha256","");
+        String localMedia=local.optString("media_catalog_sha256","");
+        int remoteMediaCount=datasetCount(remote,"media",-1);
+        int localMediaCount=datasetCount(local,"media",-2);
+        boolean mediaSame=!remoteMedia.isEmpty()&&!localMedia.isEmpty()
+                ? remoteMedia.equals(localMedia)
+                : (remoteMediaCount>=0&&remoteMediaCount==localMediaCount);
+
+        if(clinicalSame&&mediaSame){
+            if(!wanted.equals(localVersion)) migrateLocalManifestVersion(local,remote,wanted,localVersion);
+            return false;
+        }
+        if(clinicalSame){
+            refreshMediaWithManifest(remote,cookie,nonce,listener);
+            return true;
+        }
+
         hydrateWithManifest(remote,cookie,nonce,listener);
         return true;
     }
@@ -119,6 +147,62 @@ public final class MedRefDataRuntime {
         JSONObject remote=fetchRemoteManifest(cookie,nonce);
         markAuthVerified();
         hydrateWithManifest(remote,cookie,nonce,listener);
+    }
+
+    private static int datasetCount(JSONObject manifest,String key,int fallback){
+        JSONObject ds=manifest.optJSONObject("datasets");
+        JSONObject item=ds==null?null:ds.optJSONObject(key);
+        return item==null?fallback:item.optInt("count",fallback);
+    }
+
+    private void migrateLocalManifestVersion(JSONObject local,JSONObject remote,String wanted,String previousVersion)throws Exception{
+        JSONObject migrated=new JSONObject(local.toString());
+        migrated.put("data_version",wanted);
+        migrated.put("legacy_migrated_from",previousVersion);
+        migrated.put("manifest_migrated_at",System.currentTimeMillis());
+        if(remote.has("media_catalog_sha256"))migrated.put("media_catalog_sha256",remote.optString("media_catalog_sha256",""));
+        if(remote.has("media_catalog_version"))migrated.put("media_catalog_version",remote.optInt("media_catalog_version",0));
+        if(remote.has("sync_mode"))migrated.put("sync_mode",remote.optString("sync_mode",""));
+        writeJson(new File(active,"data-manifest.json"),migrated);
+    }
+
+    private void refreshMediaWithManifest(JSONObject remote,String cookie,String nonce,ProgressListener listener)throws Exception{
+        File mediaStaging=new File(root,"media-staging");
+        deleteRecursively(mediaStaging);
+        if(!mediaStaging.mkdirs())throw new IOException("Không tạo được media staging.");
+        Progress progress=new Progress(remote,listener,true);
+        try{
+            hydrateMedia(remote,cookie,nonce,mediaStaging,progress);
+            File activeMedia=new File(active,"media");
+            File mediaPrevious=new File(root,"media-previous");
+            deleteRecursively(mediaPrevious);
+            if(activeMedia.exists())moveDirectory(activeMedia,mediaPrevious);
+            try{
+                moveDirectory(mediaStaging,activeMedia);
+            }catch(Exception e){
+                if(mediaPrevious.exists()&&!activeMedia.exists())moveDirectory(mediaPrevious,activeMedia);
+                throw e;
+            }
+            deleteRecursively(mediaPrevious);
+            JSONObject local=readJson(new File(active,"data-manifest.json"));
+            local.put("media_catalog_sha256",remote.optString("media_catalog_sha256",""));
+            local.put("media_catalog_version",remote.optInt("media_catalog_version",0));
+            local.put("media_complete",true);
+            local.put("media_refreshed_at",System.currentTimeMillis());
+            if(remote.has("data_version"))local.put("data_version",remote.optString("data_version",local.optString("data_version","")));
+            if(remote.has("sync_mode"))local.put("sync_mode",remote.optString("sync_mode",""));
+            if(remote.has("datasets")){
+                JSONObject localDatasets=local.optJSONObject("datasets");
+                if(localDatasets==null){localDatasets=new JSONObject();local.put("datasets",localDatasets);}
+                JSONObject remoteMedia=remote.optJSONObject("datasets")==null?null:remote.optJSONObject("datasets").optJSONObject("media");
+                if(remoteMedia!=null)localDatasets.put("media",new JSONObject(remoteMedia.toString()));
+            }
+            writeJson(new File(active,"data-manifest.json"),local);
+            progress.done();
+        }catch(Exception e){
+            deleteRecursively(mediaStaging);
+            throw e;
+        }
     }
 
     private void hydrateWithManifest(JSONObject manifest,String cookie,String nonce,ProgressListener listener)throws Exception{
@@ -381,7 +465,14 @@ public final class MedRefDataRuntime {
 
     private static final class Progress{
         final ProgressListener listener;final int total;final int mediaTotal;int done=0;int mediaDone=0;
-        Progress(JSONObject m,ProgressListener l){listener=l;int t=0;JSONObject d=m.optJSONObject("datasets");if(d!=null)for(String k:new String[]{"protocols","icd","pl3","yhct","guides","synonyms","media"})t+=d.optJSONObject(k)==null?0:d.optJSONObject(k).optInt("count",0);mediaTotal=d!=null&&d.optJSONObject("media")!=null?d.optJSONObject("media").optInt("count",0):0;total=Math.max(1,t);emit(0,"Đang chuẩn bị dữ liệu offline…");}
+        Progress(JSONObject m,ProgressListener l){this(m,l,false);}
+        Progress(JSONObject m,ProgressListener l,boolean mediaOnly){
+            listener=l;int t=0;JSONObject d=m.optJSONObject("datasets");
+            mediaTotal=d!=null&&d.optJSONObject("media")!=null?d.optJSONObject("media").optInt("count",0):0;
+            if(mediaOnly)t=mediaTotal;
+            else if(d!=null)for(String k:new String[]{"protocols","icd","pl3","yhct","guides","synonyms","media"})t+=d.optJSONObject(k)==null?0:d.optJSONObject(k).optInt("count",0);
+            total=Math.max(1,t);emit(0,mediaOnly?"Đang kiểm tra hình/bảng nguồn…":"Đang chuẩn bị dữ liệu offline…");
+        }
         synchronized void advance(String key){done++;String label;if("media".equals(key)){mediaDone++;label="Đang tải hình/bảng nguồn "+mediaDone+"/"+Math.max(mediaTotal,mediaDone)+"…";}else label="Đang đồng bộ "+key+"…";emit(Math.min(99,(int)Math.floor(done*100.0/total)),label);}
         synchronized void done(){emit(100,"Dữ liệu offline đã sẵn sàng.");}
         void emit(int p,String m){if(listener!=null)listener.onProgress(p,m);}
