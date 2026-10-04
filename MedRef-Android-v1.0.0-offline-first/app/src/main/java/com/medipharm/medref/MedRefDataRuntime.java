@@ -90,7 +90,12 @@ public final class MedRefDataRuntime {
         JSONObject remote=fetchRemoteManifest(cookie,nonce);
         markAuthVerified();
         String wanted=remote.optString("data_version","");
-        if(hasActiveData() && wanted.equals(getDataVersion())) return false;
+        if(hasActiveData() && wanted.equals(getDataVersion())) {
+            JSONObject local=readJson(new File(active,"data-manifest.json"));
+            int remoteMedia=remote.optJSONObject("datasets")==null?-1:remote.optJSONObject("datasets").optJSONObject("media")==null?-1:remote.optJSONObject("datasets").optJSONObject("media").optInt("count",-1);
+            int localMedia=local.optJSONObject("datasets")==null?-2:local.optJSONObject("datasets").optJSONObject("media")==null?-2:local.optJSONObject("datasets").optJSONObject("media").optInt("count",-2);
+            if(remoteMedia>=0 && remoteMedia==localMedia) return false;
+        }
         hydrateWithManifest(remote,cookie,nonce,listener);
         return true;
     }
