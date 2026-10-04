@@ -1,0 +1,2 @@
+MedRef Android production signing certificate SHA-256
+F3:D8:69:68:9D:9C:93:B2:0B:52:59:45:9B:BF:28:95:80:1C:9B:07:A5:9D:C6:5E:41:45:22:DB:2D:6B:CD:13
