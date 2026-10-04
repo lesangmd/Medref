@@ -71,7 +71,14 @@ public final class LocalContentServer {
 
     private WebResourceResponse fileJson(String name)throws Exception{File f=new File(runtime.getActiveDir(),name);if(!f.isFile())return json(error("missing_local_file",name),404,"Not Found");return response(200,"OK","application/json","UTF-8",new FileInputStream(f));}
     private WebResourceResponse asset(String path,String mime)throws Exception{InputStream in=context.getAssets().open(path);return response(200,"OK",mime,encoding(path),in);}
-    private static JSONObject error(String code,String message)throws Exception{return new JSONObject().put("code",code).put("message",message==null?"":message);}
+    private static JSONObject error(String code,String message){
+        JSONObject o=new JSONObject();
+        try{
+            o.put("code",code);
+            o.put("message",message==null?"":message);
+        }catch(Exception ignored){}
+        return o;
+    }
     private static WebResourceResponse json(JSONObject o,int status,String reason){return response(status,reason,"application/json","UTF-8",text(o.toString()));}
     private static WebResourceResponse notFound(){return response(404,"Not Found","text/plain","UTF-8",text("Not Found"));}
     private static ByteArrayInputStream text(String s){return new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8));}
