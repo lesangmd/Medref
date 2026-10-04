@@ -60,7 +60,7 @@ public final class MainActivity extends Activity {
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
     private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OfflineFirst";
-    private static final Pattern NONCE_RE=Pattern.compile("\\"restNonce\\"\\s*:\\s*\\"([^\\"]+)\\"");
+    private static final Pattern NONCE_RE=Pattern.compile("\\\"restNonce\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private FrameLayout root,webContainer;
