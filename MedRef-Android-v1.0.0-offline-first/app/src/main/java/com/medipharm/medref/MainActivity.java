@@ -60,7 +60,7 @@ public final class MainActivity extends Activity {
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
     private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OfflineFirst";
-    private static final Pattern NONCE_RE=Pattern.compile("\\\"restNonce\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+    private static final Pattern NONCE_RE=Pattern.compile("\\"restNonce\\"\\s*:\\s*\\"([^\\"]+)\\"");
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private FrameLayout root,webContainer;
@@ -298,12 +298,12 @@ public final class MainActivity extends Activity {
                 if(isMemberAuthenticated()){completeLogin();return;}
                 if(!loginAttemptInjected){
                     loginAttemptInjected=true;
-                    String js="(function(){var u=document.querySelector('input[name=\\"log\\"],input[name=\\"username\\"],input[name=\\"user_login\\"],input[type=\\"email\\"]');"+
-                            "var p=document.querySelector('input[name=\\"pwd\\"],input[name=\\"password\\"],input[type=\\"password\\"]');"+
+                    String js="(function(){var u=document.querySelector('input[name=\"log\"],input[name=\"username\"],input[name=\"user_login\"],input[type=\"email\"]');"+
+                            "var p=document.querySelector('input[name=\"pwd\"],input[name=\"password\"],input[type=\"password\"]');"+
                             "if(!u||!p)return 'NO_FIELDS';u.value="+JSONObject.quote(username)+";p.value="+JSONObject.quote(password)+";"+
                             "u.dispatchEvent(new Event('input',{bubbles:true}));p.dispatchEvent(new Event('input',{bubbles:true}));"+
-                            "var r=document.querySelector('input[name=\\"rememberme\\"],input[name*=\\"remember\\"]');if(r)r.checked="+(remember?"true":"false")+";"+
-                            "var f=p.form||u.form||document.querySelector('form');if(!f)return 'NO_FORM';var b=f.querySelector('button[type=\\"submit\\"],input[type=\\"submit\\"]');if(b)b.click();else f.submit();return 'SUBMITTED';})()";
+                            "var r=document.querySelector('input[name=\"rememberme\"],input[name*=\"remember\"]');if(r)r.checked="+(remember?"true":"false")+";"+
+                            "var f=p.form||u.form||document.querySelector('form');if(!f)return 'NO_FORM';var b=f.querySelector('button[type=\"submit\"],input[type=\"submit\"]');if(b)b.click();else f.submit();return 'SUBMITTED';})()";
                     v.evaluateJavascript(js,value->{if(value!=null&&(value.contains("NO_FIELDS")||value.contains("NO_FORM"))){main.post(()->{loginButton.setEnabled(true);loginButton.setText("ĐĂNG NHẬP");setLoginStatus("Không tìm thấy biểu mẫu đăng nhập Membership. Vui lòng thử lại.");});}});
                     return;
                 }
