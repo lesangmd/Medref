@@ -18,7 +18,7 @@ e947563393a4f8b656bfa7cecdd70058285d5407278bc6d9d59650c6d91ce18a  ./app/src/main
 40ac1fe5351c7afef8da33bb4bf7ae8bff89763a28aa0fdb8319fcf189e5764b  ./app/src/main/assets/web/img/icon-512.png
 5506928e11b34350bdf7cfd89f94593595cc0f7a9e7c8fe9ba7488ab59d31e13  ./app/src/main/assets/web/index.html
 fb721a299caba6dc092b3e14814e71b7a81d8767590f2c476e5bbacded4f3bd0  ./app/src/main/java/com/medipharm/medref/AppUpdateJobService.java
-91106ed0cc38ed6ee3585ab8b7914860ea3bdcc96e8bd132366080b45e3ec4e1  ./app/src/main/java/com/medipharm/medref/LocalContentServer.java
+e24b86d1dce302147702163239a8090c46e20bbe27325669c40e595be9029b8b  ./app/src/main/java/com/medipharm/medref/LocalContentServer.java
 c2eb36a3ba2f282532c8f621b695fe9052a6e097bee4dfed3ddf68739c29eff7  ./app/src/main/java/com/medipharm/medref/MainActivity.java
 f954909eb088f29f8ad4ba35a9308a32117e25156cdc1e9105b2ba2a1b8bc719  ./app/src/main/java/com/medipharm/medref/MedRefDataRuntime.java
 bf97681771f549995a7fe3b0cd351e47d946d524bd005c9485c525170b4c1472  ./app/src/main/java/com/medipharm/medref/MedRefDatabase.java
@@ -49,3 +49,4 @@ cc38bc495ca4e4d7fa2fe7c9c1112f36af7a63fbf4fc3e7a088e215942403385  ./gradle.prope
 7c0d559bf15e213eb3d0f03d083e49d0b245df728c66ff7af0c8ada460102fdd  ./medref-update.example.json
 920c0611544439899d81ba048d5b94ac4e3b7e463a2984872d19b4c13251b5ca  ./settings.gradle
 9668b37073eee17d1a5f61ccbe4cb063e3e42b549f8ba8b29934712751e57df5  ./tools/qa_medref_v100.py
+d617ac809cc9edd3d0849c6f3ad63040080a292ba1d4720745cef08215e0897b  ./SIGNING-CERTIFICATE-SHA256.txt
