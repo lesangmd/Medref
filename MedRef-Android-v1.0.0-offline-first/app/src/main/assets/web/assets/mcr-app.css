@@ -1,0 +1,673 @@
+:root{
+  --mcr-bg:#f4f7fa;--mcr-surface:#fff;--mcr-surface-2:#f8fafc;--mcr-line:#dfe7ef;
+  --mcr-text:#172033;--mcr-muted:#64748b;--mcr-brand:#0b6674;--mcr-brand-2:#0f8b8d;
+  --mcr-blue:#2563eb;--mcr-green:#15803d;--mcr-red:#be3a4b;--mcr-amber:#b45309;
+  --mcr-shadow:0 12px 30px rgba(15,23,42,.07);--mcr-radius:16px;--mcr-top:66px;
+}
+:root[data-mcr-theme="dark"]{--mcr-bg:#0b1220;--mcr-surface:#111827;--mcr-surface-2:#0f172a;--mcr-line:#273449;--mcr-text:#e5edf7;--mcr-muted:#94a3b8;--mcr-brand:#2dd4bf;--mcr-brand-2:#22c55e;--mcr-shadow:0 16px 34px rgba(0,0,0,.25)}
+*{box-sizing:border-box}html,body{margin:0;width:100%;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--mcr-bg);color:var(--mcr-text)}body.mcr-body{overflow:hidden}.mcr-app{height:100dvh;display:flex;flex-direction:column;background:var(--mcr-bg)}button,input{font:inherit}
+.mcr-topbar{height:var(--mcr-top);display:grid;grid-template-columns:minmax(230px,300px) minmax(320px,760px) minmax(140px,1fr);gap:18px;align-items:center;padding:0 20px;background:color-mix(in srgb,var(--mcr-surface) 94%,transparent);border-bottom:1px solid var(--mcr-line);backdrop-filter:blur(14px);position:relative;z-index:120}
+.mcr-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--mcr-text);min-width:0}.mcr-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:linear-gradient(135deg,var(--mcr-brand),var(--mcr-brand-2));color:#fff;font-size:20px;font-weight:850;box-shadow:0 8px 20px color-mix(in srgb,var(--mcr-brand) 23%,transparent)}.mcr-brand>span:last-child{display:flex;flex-direction:column;min-width:0}.mcr-brand strong{font-size:14px;letter-spacing:.055em}.mcr-brand small{font-size:10px;color:var(--mcr-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcr-global-search{height:44px;display:flex;align-items:center;position:relative;border:1px solid var(--mcr-line);border-radius:14px;background:var(--mcr-surface-2);transition:.18s}.mcr-global-search:focus-within{border-color:color-mix(in srgb,var(--mcr-brand) 50%,var(--mcr-line));box-shadow:0 0 0 4px color-mix(in srgb,var(--mcr-brand) 10%,transparent);background:var(--mcr-surface)}.mcr-global-search>span{position:absolute;left:14px;color:var(--mcr-muted);font-size:20px}.mcr-global-search input{width:100%;height:100%;border:0;outline:0;background:transparent;color:var(--mcr-text);padding:0 42px 0 42px;font-size:14px}.mcr-global-search input::placeholder{color:color-mix(in srgb,var(--mcr-muted) 82%,transparent)}.mcr-global-search button{position:absolute;right:7px;width:30px;height:30px;border:0;border-radius:9px;background:transparent;color:var(--mcr-muted);font-size:20px;cursor:pointer}.mcr-global-search button:hover{background:var(--mcr-line);color:var(--mcr-text)}
+.mcr-actions{display:flex;justify-content:flex-end;gap:8px}.mcr-actions button,.mcr-actions a{height:38px;min-width:38px;border:1px solid var(--mcr-line);border-radius:11px;background:var(--mcr-surface);color:var(--mcr-text);display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;cursor:pointer;padding:0 11px}.mcr-actions button:hover,.mcr-actions a:hover{border-color:color-mix(in srgb,var(--mcr-brand) 40%,var(--mcr-line));color:var(--mcr-brand)}#mcr-install span{font-size:12px;font-weight:700}
+.mcr-nav{height:48px;display:flex;align-items:center;gap:4px;padding:0 18px;overflow-x:auto;background:var(--mcr-surface);border-bottom:1px solid var(--mcr-line);position:relative;z-index:110;scrollbar-width:none}.mcr-nav::-webkit-scrollbar{display:none}.mcr-nav button{border:0;background:transparent;color:var(--mcr-muted);padding:8px 12px;border-radius:9px;font-size:13px;font-weight:700;white-space:nowrap;cursor:pointer}.mcr-nav button:hover{background:var(--mcr-surface-2);color:var(--mcr-text)}.mcr-nav button.is-active{background:color-mix(in srgb,var(--mcr-brand) 11%,var(--mcr-surface));color:var(--mcr-brand)}
+.mcr-main{flex:1;min-height:0;position:relative;overflow:hidden}.mcr-view{display:none;height:100%;min-height:0;overflow:auto}.mcr-view.is-active{display:block}.mcr-view[data-mcr-panel="protocols"]{overflow:hidden}.mcr-section-head{max-width:1380px;margin:0 auto;padding:24px 28px 4px}.mcr-section-head span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:var(--mcr-brand)}.mcr-section-head h1{font-size:clamp(26px,3vw,38px);margin:6px 0 5px;letter-spacing:-.025em}.mcr-section-head p{margin:0;color:var(--mcr-muted);font-size:14px;line-height:1.55}
+.mcr-dashboard{max-width:1380px;margin:0 auto;padding:26px 28px 52px}.mcr-hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(300px,.7fr);gap:18px;align-items:stretch;margin-bottom:18px}.mcr-hero-main{position:relative;overflow:hidden;border:1px solid color-mix(in srgb,var(--mcr-brand) 20%,var(--mcr-line));border-radius:20px;padding:28px;background:linear-gradient(135deg,color-mix(in srgb,var(--mcr-brand) 8%,var(--mcr-surface)),var(--mcr-surface) 55%)}.mcr-hero-main:after{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-70px;top:-90px;background:color-mix(in srgb,var(--mcr-brand) 7%,transparent)}.mcr-hero-kicker{font-size:11px;letter-spacing:.09em;font-weight:850;color:var(--mcr-brand);text-transform:uppercase}.mcr-hero h1{font-size:clamp(30px,3vw,46px);line-height:1.06;letter-spacing:-.035em;margin:8px 0 10px;max-width:760px}.mcr-hero p{margin:0;color:var(--mcr-muted);font-size:14px;line-height:1.7;max-width:760px}.mcr-hero-links{display:flex;gap:9px;flex-wrap:wrap;margin-top:18px}.mcr-hero-links button{border:1px solid var(--mcr-line);background:var(--mcr-surface);color:var(--mcr-text);border-radius:11px;padding:9px 12px;font-weight:750;cursor:pointer}.mcr-hero-links button:first-child{background:var(--mcr-brand);border-color:var(--mcr-brand);color:#fff}
+.mcr-live-card{border:1px solid var(--mcr-line);border-radius:20px;padding:22px;background:var(--mcr-surface);display:flex;flex-direction:column}.mcr-live-card h2{font-size:16px;margin:0 0 14px}.mcr-live-list{display:grid;gap:9px}.mcr-live-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--mcr-line)}.mcr-live-row:last-child{border:0}.mcr-live-row span{color:var(--mcr-muted);font-size:12px}.mcr-live-row b{font-size:14px}.mcr-live-foot{margin-top:auto;padding-top:14px;color:var(--mcr-muted);font-size:11px;line-height:1.5}
+.mcr-stat-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:18px 0}.mcr-stat-card{position:relative;overflow:hidden;background:var(--mcr-surface);border:1px solid var(--mcr-line);border-radius:15px;padding:16px;min-height:106px}.mcr-stat-card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--stat-accent,var(--mcr-brand))}.mcr-stat-card small{display:block;color:var(--mcr-muted);font-size:11px;font-weight:700;line-height:1.4}.mcr-stat-card strong{display:block;font-size:26px;line-height:1.15;margin:6px 0 3px;letter-spacing:-.02em}.mcr-stat-card span{font-size:10px;color:var(--mcr-muted)}
+.mcr-section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:24px 0 11px}.mcr-section-title h2{font-size:17px;margin:0}.mcr-section-title p{margin:3px 0 0;color:var(--mcr-muted);font-size:12px}.mcr-tools{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.mcr-tool{border:1px solid var(--mcr-line);background:var(--mcr-surface);border-radius:15px;padding:16px;text-align:left;color:var(--mcr-text);cursor:pointer;min-height:150px;display:flex;flex-direction:column;transition:.18s}.mcr-tool:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--mcr-brand) 35%,var(--mcr-line));box-shadow:var(--mcr-shadow)}.mcr-tool-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:12px;font-weight:850;color:var(--mcr-brand);background:color-mix(in srgb,var(--mcr-brand) 9%,var(--mcr-surface));border:1px solid color-mix(in srgb,var(--mcr-brand) 18%,var(--mcr-line))}.mcr-tool strong{font-size:14px;margin-top:12px}.mcr-tool p{font-size:11px;color:var(--mcr-muted);line-height:1.55;margin:6px 0 0}.mcr-tool b{margin-top:auto;padding-top:10px;color:var(--mcr-brand);font-size:12px}
+.mcr-chart-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);gap:14px}.mcr-chart-card{background:var(--mcr-surface);border:1px solid var(--mcr-line);border-radius:16px;padding:18px;min-height:330px}.mcr-chart-card h3{margin:0;font-size:15px}.mcr-chart-card>p{margin:4px 0 16px;color:var(--mcr-muted);font-size:11px}.mcr-bars{display:grid;gap:10px}.mcr-bar-row{display:grid;grid-template-columns:minmax(140px,220px) minmax(100px,1fr) 42px;align-items:center;gap:10px}.mcr-bar-row span{font-size:11px;color:var(--mcr-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mcr-bar-track{height:9px;background:var(--mcr-surface-2);border-radius:99px;overflow:hidden}.mcr-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--mcr-brand),var(--mcr-brand-2))}.mcr-bar-row b{text-align:right;font-size:11px}.mcr-donut-wrap{display:grid;grid-template-columns:180px 1fr;align-items:center;gap:18px;height:240px}.mcr-donut{width:180px;height:180px}.mcr-donut circle{fill:none;stroke-width:18;transform:rotate(-90deg);transform-origin:50% 50%}.mcr-donut .base{stroke:var(--mcr-surface-2)}.mcr-donut .seg-active{stroke:var(--mcr-brand)}.mcr-donut .seg-cancel{stroke:var(--mcr-red)}.mcr-donut .seg-new{stroke:var(--mcr-amber)}.mcr-donut text{fill:var(--mcr-text);font-size:15px;font-weight:800;text-anchor:middle;dominant-baseline:middle}.mcr-legend{display:grid;gap:10px}.mcr-legend div{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--mcr-line);padding-bottom:8px}.mcr-legend span{font-size:11px;color:var(--mcr-muted)}.mcr-legend b{font-size:12px}
+.mcr-search-results{position:absolute;z-index:200;top:58px;left:50%;transform:translateX(-50%);width:min(840px,calc(100vw - 32px));max-height:min(70vh,640px);overflow:auto;background:var(--mcr-surface);border:1px solid var(--mcr-line);border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.18);padding:12px}.mcr-search-group+.mcr-search-group{margin-top:12px;border-top:1px solid var(--mcr-line);padding-top:12px}.mcr-search-group-title{display:flex;justify-content:space-between;align-items:center;padding:3px 5px 8px}.mcr-search-group-title strong{font-size:12px}.mcr-search-group-title span{font-size:10px;color:var(--mcr-muted)}.mcr-search-item{width:100%;display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;border:0;background:transparent;color:var(--mcr-text);text-align:left;padding:10px;border-radius:10px;cursor:pointer}.mcr-search-item:hover{background:var(--mcr-surface-2)}.mcr-search-code{font-size:11px;font-weight:850;color:var(--mcr-blue);padding:4px 6px;border-radius:7px;background:color-mix(in srgb,var(--mcr-blue) 8%,var(--mcr-surface))}.mcr-search-copy{display:flex;flex-direction:column;min-width:0}.mcr-search-copy strong{font-size:12px}.mcr-search-copy small{font-size:10px;color:var(--mcr-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mcr-search-link{font-size:10px;color:var(--mcr-brand);font-weight:800}.mcr-search-empty,.mcr-loading{padding:30px;text-align:center;color:var(--mcr-muted);font-size:13px}
+/* Embedded ICD: unified shell owns header/navigation/PWA. */
+.mcr-embedded-icd{max-width:1380px;margin:0 auto;padding:12px 28px 50px}.mcr-embedded-icd .nah-icd10-header{display:none!important}.mcr-embedded-icd .nah-icd10-module-tabs{display:flex!important}.mcr-embedded-icd .nah-icd10-app{min-height:auto!important;border-radius:0!important;background:transparent!important}.mcr-embedded-icd .nah-icd10-overview{margin-top:0}.nah-icd10-protocol-links{margin-top:12px;padding-top:12px;border-top:1px solid var(--nah-line,#e2e8f0);display:grid;gap:7px}.nah-icd10-protocol-links>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.nah-icd10-protocol-links>div strong{font-size:12px}.nah-icd10-protocol-links>div span{font-size:10px;color:#64748b}.nah-icd10-protocol-links>a{display:flex;justify-content:space-between;gap:10px;text-decoration:none;padding:7px 9px;border-radius:8px;background:rgba(15,118,110,.06);color:inherit}.nah-icd10-protocol-links>a:hover{background:rgba(15,118,110,.11)}.nah-icd10-protocol-links a b{font-size:11px}.nah-icd10-protocol-links a small{font-size:9px;color:#64748b}.nah-icd10-protocol-links .nah-icd10-protocol-all{font-size:10px;color:#0f766e;font-weight:800;background:transparent;padding-left:0}
+/* Embedded Treatment Protocols */
+.mtp-app.mtp-embedded{height:100%!important}.mtp-embedded .mtp-shell{height:100%!important}.mtp-embedded .mtp-body{height:100%!important;min-height:0;flex:1}.mtp-embedded .mtp-main{padding-top:22px}.mtp-embedded .mtp-sidebar{padding-top:16px}
+:root[data-mcr-theme="dark"] .nah-icd10-app{--nah-bg:#0b1220;--nah-surface:#111827;--nah-surface-2:#0f172a;--nah-line:#273449;--nah-text:#e5edf7;--nah-muted:#94a3b8}.mcr-body .nah-icd10-app.nah-icd10--dark{background:transparent}
+@media(max-width:1100px){.mcr-stat-grid{grid-template-columns:repeat(3,1fr)}.mcr-tools{grid-template-columns:repeat(3,1fr)}.mcr-chart-grid{grid-template-columns:1fr}.mcr-topbar{grid-template-columns:220px minmax(240px,1fr) auto}.mcr-actions #mcr-install span{display:none}}
+@media(max-width:760px){:root{--mcr-top:60px}.mcr-topbar{grid-template-columns:44px minmax(0,1fr) auto;padding:0 10px;gap:8px}.mcr-brand>span:last-child{display:none}.mcr-mark{width:38px;height:38px}.mcr-actions{gap:5px}.mcr-actions button,.mcr-actions a{width:36px;min-width:36px;padding:0}.mcr-nav{padding:0 9px;height:46px}.mcr-nav button{font-size:12px;padding:8px 10px}.mcr-dashboard{padding:16px 12px 38px}.mcr-hero{grid-template-columns:1fr}.mcr-hero-main{padding:20px}.mcr-live-card{padding:17px}.mcr-stat-grid{grid-template-columns:repeat(2,1fr);gap:9px}.mcr-stat-card{padding:14px;min-height:96px}.mcr-stat-card strong{font-size:22px}.mcr-tools{grid-template-columns:repeat(2,1fr);gap:9px}.mcr-tool{min-height:138px;padding:14px}.mcr-chart-card{padding:15px;min-height:0}.mcr-bar-row{grid-template-columns:110px 1fr 32px;gap:7px}.mcr-donut-wrap{grid-template-columns:140px 1fr;height:auto}.mcr-donut{width:140px;height:140px}.mcr-section-head{padding:18px 14px 2px}.mcr-embedded-icd{padding:10px 10px 36px}.mcr-search-results{top:54px}.mtp-embedded .mtp-body{grid-template-columns:minmax(0,1fr)!important}.mtp-embedded .mtp-sidebar{position:fixed!important;top:106px!important;bottom:0!important;left:0!important;z-index:140!important}}
+@media(max-width:430px){.mcr-tools{grid-template-columns:1fr 1fr}.mcr-stat-grid{grid-template-columns:1fr 1fr}.mcr-hero h1{font-size:30px}.mcr-donut-wrap{grid-template-columns:1fr;justify-items:center}.mcr-legend{width:100%}}
+
+.mcr-app{position:relative}
+
+
+/* v0.22.2 polish */
+.mcr-nav button[data-mcr-view="dashboard"]{--nav-accent:#0b6674}
+.mcr-nav button[data-mcr-view="icd"]{--nav-accent:#1d4ed8}
+.mcr-nav button[data-mcr-view="protocols"]{--nav-accent:#0f766e}
+.mcr-nav button{position:relative}
+.mcr-nav button::after{content:"";position:absolute;left:10px;right:10px;bottom:4px;height:3px;border-radius:99px;background:transparent;transition:.18s}
+.mcr-nav button:hover{color:var(--nav-accent,var(--mcr-brand));background:color-mix(in srgb,var(--nav-accent,var(--mcr-brand)) 8%, var(--mcr-surface))}
+.mcr-nav button.is-active{color:var(--nav-accent,var(--mcr-brand));background:color-mix(in srgb,var(--nav-accent,var(--mcr-brand)) 12%, var(--mcr-surface));border-color:color-mix(in srgb,var(--nav-accent,var(--mcr-brand)) 24%, var(--mcr-line))}
+.mcr-nav button.is-active::after{background:var(--nav-accent,var(--mcr-brand))}
+
+/* embedded ICD layout hardening */
+.mcr-embedded-icd .nah-icd10-search-head{align-items:flex-start!important;flex-wrap:wrap!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle{display:inline-flex!important;align-items:center!important;white-space:nowrap!important;max-width:100%!important;flex:0 1 auto!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle span{display:inline-block!important;white-space:normal!important;line-height:1.35!important}
+.mcr-embedded-icd .nah-icd10-filters button,
+.mcr-embedded-icd .nah-icd10-detail-filters button{display:inline-flex!important;align-items:center!important;gap:4px!important;white-space:nowrap!important;max-width:100%!important}
+.mcr-embedded-icd .nah-icd10-filters button small,
+.mcr-embedded-icd .nah-icd10-detail-filters button small{margin-left:0!important}
+
+/* clearer embedded protocol shell */
+.mtp-embedded .mtp-main{padding-top:18px!important;background:linear-gradient(180deg, rgba(11,102,116,.03), transparent 160px)}
+.mtp-embedded .mtp-home-head{padding-top:8px!important}
+.mtp-error-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.mtp-secondary{background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1!important}
+
+
+/* v0.22.3 dashboard + dock compatibility */
+:root{--mcr-shell-max:1240px;--mcr-dock-safe:82px}
+.mcr-topbar{padding-right:calc(20px + var(--mcr-dock-safe))}
+.mcr-nav{padding-right:calc(18px + var(--mcr-dock-safe))}
+.mcr-section-head,.mcr-dashboard,.mcr-embedded-icd{max-width:calc(var(--mcr-shell-max) + var(--mcr-dock-safe));padding-right:calc(28px + var(--mcr-dock-safe))}
+.mcr-embedded-icd .nah-icd10-module-tabs,.mcr-embedded-icd .nah-icd10-overview,.mcr-embedded-icd .nah-icd10-subtabs,.mcr-embedded-icd .nah-icd10-grid,.mcr-embedded-icd .nah-icd10-guide-layout{max-width:var(--mcr-shell-max);margin-left:auto!important;margin-right:auto!important}
+.mtp-embedded .mtp-main{padding-right:calc(clamp(18px,3vw,42px) + var(--mcr-dock-safe))!important}
+.mtp-embedded .mtp-home-head,.mtp-embedded .mtp-result-section,.mtp-embedded .mtp-protocol-page,.mtp-embedded .mtp-source-section{max-width:var(--mcr-shell-max)!important}
+.mcr-hero-main{padding:30px 30px 32px}
+.mcr-hero h1{font-size:clamp(34px,3vw,48px);max-width:780px}
+.mcr-hero-kicker{font-size:12px;letter-spacing:.12em}
+.mcr-live-card{padding:24px}
+.mcr-live-row b{font-size:15px}
+.mcr-stat-card{min-height:112px}
+.mcr-tools .mcr-tool{min-height:158px}
+.mcr-tool strong{font-size:15px}
+.mcr-tool p{font-size:11.5px}
+
+/* colored tabs without underline */
+.mcr-nav button::after{display:none!important}
+.mcr-nav button{border:1px solid transparent;transition:.18s background,.18s color,.18s border-color,.18s box-shadow}
+.mcr-nav button.is-active{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--nav-accent,var(--mcr-brand)) 18%, transparent)}
+
+/* ICD filter compaction */
+.mcr-embedded-icd .nah-icd10-search-head{gap:10px!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle{border:0!important;background:transparent!important;padding:0!important;border-radius:0!important;gap:10px!important;box-shadow:none!important;min-width:auto!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle input{width:18px!important;height:18px!important;margin:0!important;flex:0 0 18px!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle span{white-space:nowrap!important;font-size:13px!important;font-weight:700!important;line-height:1.2!important}
+.mcr-embedded-icd .nah-icd10-detail-filters,.mcr-embedded-icd .nah-icd10-filters{gap:8px!important}
+.mcr-embedded-icd .nah-icd10-filters button,.mcr-embedded-icd .nah-icd10-detail-filters button{font-size:12px!important;padding:7px 10px!important;border-radius:999px!important}
+.mcr-embedded-icd .nah-icd10-filters button small,.mcr-embedded-icd .nah-icd10-detail-filters button small{font-size:11px!important}
+
+@media(max-width:1100px){
+  :root{--mcr-dock-safe:0px;--mcr-shell-max:100%}
+  .mcr-topbar{padding-right:20px}
+  .mcr-nav{padding-right:18px}
+  .mcr-section-head,.mcr-dashboard,.mcr-embedded-icd{padding-right:28px}
+  .mtp-embedded .mtp-main{padding-right:clamp(18px,3vw,42px)!important}
+}
+@media(max-width:760px){
+  .mcr-section-head,.mcr-dashboard,.mcr-embedded-icd{padding-right:12px}
+  .mcr-embedded-icd .nah-icd10-primary-toggle span{white-space:normal!important}
+}
+
+
+/* v0.22.4 compact pastel dashboard */
+html,body,.mcr-app,button,input{font-size:14px}
+.mcr-brand strong{font-size:15px}
+.mcr-brand small{font-size:11px}
+.mcr-global-search input{font-size:14px}
+.mcr-nav button{font-size:14px}
+.mcr-section-head p,.mcr-hero p,.mcr-live-row span,.mcr-live-foot,.mcr-tool p,.mcr-chart-card>p,.mcr-bar-row span,.mcr-legend span,.mcr-stat-card span,.mcr-stat-card small{font-size:14px;line-height:1.55}
+.mcr-dashboard{max-width:1200px;padding-top:18px;padding-bottom:36px}
+.mcr-hero{grid-template-columns:minmax(0,1.18fr) minmax(260px,.82fr);gap:14px;margin-bottom:14px}
+.mcr-hero-main,.mcr-live-card,.mcr-chart-card,.mcr-tool,.mcr-stat-card{box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.mcr-hero-main{padding:22px 24px 24px;border-radius:18px;background:linear-gradient(135deg,#f2fbfb 0%,#fbfdfd 48%,#eef7ff 100%);border-color:#dcecf1}
+.mcr-hero-main:after{width:170px;height:170px;right:-52px;top:-74px;background:rgba(11,102,116,.06)}
+.mcr-hero-kicker{font-size:12px;letter-spacing:.14em}
+.mcr-hero h1{font-size:clamp(28px,2.6vw,40px);line-height:1.08;margin:6px 0 8px;max-width:680px}
+.mcr-hero p{max-width:690px;margin:0}
+.mcr-hero-links{margin-top:14px;gap:8px}
+.mcr-hero-links button{padding:10px 14px;border-radius:12px;background:linear-gradient(180deg,#ffffff,#f8fbfb)}
+.mcr-hero-links button:first-child{background:linear-gradient(135deg,#1598a5,#0b6674)}
+.mcr-live-card{padding:18px 18px 16px;border-radius:18px;background:linear-gradient(135deg,#fffefd 0%,#f9fbff 100%)}
+.mcr-live-card h2{font-size:18px;margin-bottom:8px}
+.mcr-live-list{gap:3px}
+.mcr-live-row{padding:8px 0}
+.mcr-live-row b{font-size:18px}
+.mcr-live-foot{padding-top:10px}
+.mcr-stat-grid{gap:10px;margin:14px 0 16px;grid-template-columns:repeat(5,minmax(0,1fr))}
+.mcr-stat-card{min-height:92px;padding:14px 15px;border-radius:14px;border:1px solid #e4ebf2;background:linear-gradient(135deg,var(--card-a,#f9fcff),var(--card-b,#ffffff))}
+.mcr-stat-card strong{font-size:24px;margin:4px 0 2px}
+.mcr-stat-card:nth-child(1){--card-a:#edf9f7;--card-b:#fbfffe}
+.mcr-stat-card:nth-child(2){--card-a:#eef6ff;--card-b:#fbfdff}
+.mcr-stat-card:nth-child(3){--card-a:#f4f0ff;--card-b:#fcfbff}
+.mcr-stat-card:nth-child(4){--card-a:#fff1f3;--card-b:#fffafb}
+.mcr-stat-card:nth-child(5){--card-a:#fff7ed;--card-b:#fffdf8}
+.mcr-stat-card small{font-weight:800}
+.mcr-section-title{margin:18px 0 10px}
+.mcr-section-title h2{font-size:18px}
+.mcr-tools{gap:10px;grid-template-columns:repeat(5,minmax(0,1fr))}
+.mcr-tool{min-height:132px;padding:14px 14px 13px;border-radius:14px;border:1px solid #e5ebf2;background:linear-gradient(135deg,var(--tool-a,#f8fbfd),var(--tool-b,#ffffff));box-shadow:0 8px 20px rgba(15,23,42,.04)}
+.mcr-tool:nth-child(1){--tool-a:#eefaf7;--tool-b:#ffffff}
+.mcr-tool:nth-child(2){--tool-a:#eef4ff;--tool-b:#ffffff}
+.mcr-tool:nth-child(3){--tool-a:#fff6eb;--tool-b:#ffffff}
+.mcr-tool:nth-child(4){--tool-a:#f5f1ff;--tool-b:#ffffff}
+.mcr-tool:nth-child(5){--tool-a:#eefbfd;--tool-b:#ffffff}
+.mcr-tool-icon{width:34px;height:34px;border-radius:10px;font-size:12px;background:rgba(255,255,255,.78)}
+.mcr-tool strong{font-size:15px;margin-top:10px}
+.mcr-tool p{margin-top:5px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mcr-tool b{font-size:12px;padding-top:8px}
+.mcr-chart-grid{gap:10px}
+.mcr-chart-card{padding:15px 16px;border-radius:14px;min-height:280px;background:linear-gradient(135deg,#fbfdff,#ffffff)}
+.mcr-chart-card h3{font-size:16px}
+.mcr-bar-row{grid-template-columns:minmax(130px,190px) minmax(90px,1fr) 40px}
+.mcr-bar-track{height:10px}
+.mcr-donut-wrap{grid-template-columns:160px 1fr;gap:14px;height:210px}
+.mcr-donut{width:160px;height:160px}
+.mcr-donut text{font-size:14px}
+@media(max-width:1200px){
+  .mcr-dashboard{max-width:1060px}
+  .mcr-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .mcr-tools{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  html,body,.mcr-app,button,input{font-size:14px}
+  .mcr-dashboard{padding-top:14px;padding-bottom:28px}
+  .mcr-hero{grid-template-columns:1fr;gap:10px}
+  .mcr-hero-main,.mcr-live-card,.mcr-chart-card,.mcr-tool,.mcr-stat-card{box-shadow:none}
+  .mcr-hero-main{padding:18px}
+  .mcr-hero h1{font-size:30px}
+  .mcr-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mcr-tools{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mcr-chart-card{min-height:0}
+}
+
+
+/* v0.22.5 icd checkbox focus cleanup */
+.mcr-embedded-icd .nah-icd10-primary-toggle input{outline:none!important;box-shadow:none!important;appearance:auto!important;-webkit-appearance:checkbox!important;border:0!important;background:transparent!important}
+.mcr-embedded-icd .nah-icd10-primary-toggle input:focus,
+.mcr-embedded-icd .nah-icd10-primary-toggle input:focus-visible,
+.mcr-embedded-icd .nah-icd10-primary-toggle input:active{outline:none!important;box-shadow:none!important}
+
+
+/* v0.24.8 — canonical header menu, install UX and host-synchronized dark mode */
+.mcr-actions{position:relative;min-width:max-content}.mcr-menu{position:relative;display:flex;justify-content:flex-end}.mcr-actions .mcr-menu-toggle{min-width:auto;padding:0 12px;gap:7px;font-weight:800}.mcr-menu-glyph{font-size:18px;line-height:1}.mcr-menu-title{font-size:13px}
+.mcr-menu-panel{position:absolute;right:0;top:calc(100% + 9px);z-index:260;width:min(230px,calc(100vw - 24px));padding:7px;display:grid;gap:3px;border:1px solid var(--mcr-line);border-radius:14px;background:color-mix(in srgb,var(--mcr-surface) 97%,transparent);box-shadow:0 18px 44px rgba(15,23,42,.18);backdrop-filter:blur(16px)}.mcr-menu-panel[hidden]{display:none!important}
+.mcr-actions .mcr-menu-item{width:100%;height:42px;min-width:0;padding:0 11px;border:0;border-radius:10px;background:transparent;color:var(--mcr-text);display:flex;align-items:center;justify-content:flex-start;gap:10px;text-decoration:none;text-align:left;font-size:13px;font-weight:750;cursor:pointer}.mcr-actions .mcr-menu-item:hover,.mcr-actions .mcr-menu-item:focus-visible{background:var(--mcr-surface-2);color:var(--mcr-brand);outline:none}.mcr-menu-icon{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;background:color-mix(in srgb,var(--mcr-brand) 9%,var(--mcr-surface));color:var(--mcr-brand);font-size:15px;font-weight:900;flex:0 0 24px}.mcr-menu-install-icon{font-size:19px;line-height:1}.mcr-menu-item[hidden]{display:none!important}
+.mcr-toast{position:fixed;right:18px;top:calc(var(--mcr-top) + 58px);z-index:420;max-width:min(420px,calc(100vw - 28px));padding:11px 14px;border:1px solid var(--mcr-line);border-radius:12px;background:var(--mcr-surface);color:var(--mcr-text);box-shadow:var(--mcr-shadow);font-size:12px;font-weight:700;line-height:1.45}.mcr-toast[hidden]{display:none!important}
+
+/* The dashboard had late light-only pastel declarations in v0.22.4. Override those
+   with dark surfaces while preserving the exact geometry and information hierarchy. */
+:root[data-mcr-theme="dark"] .mcr-hero-main{background:linear-gradient(135deg,#10262b 0%,#111827 52%,#122235 100%);border-color:#294355}
+:root[data-mcr-theme="dark"] .mcr-hero-main:after{background:rgba(45,212,191,.07)}
+:root[data-mcr-theme="dark"] .mcr-hero-links button{background:linear-gradient(180deg,#172334,#111827);border-color:var(--mcr-line);color:var(--mcr-text)}
+:root[data-mcr-theme="dark"] .mcr-hero-links button:first-child{background:linear-gradient(135deg,#0f8b8d,#0b6674);border-color:#2a9aa0;color:#fff}
+:root[data-mcr-theme="dark"] .mcr-live-card{background:linear-gradient(135deg,#151d29 0%,#111827 100%);border-color:var(--mcr-line)}
+:root[data-mcr-theme="dark"] .mcr-stat-card{border-color:var(--mcr-line);background:linear-gradient(135deg,var(--card-a,#121d2b),var(--card-b,#111827))}
+:root[data-mcr-theme="dark"] .mcr-stat-card:nth-child(1){--card-a:#102925;--card-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-stat-card:nth-child(2){--card-a:#12213a;--card-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-stat-card:nth-child(3){--card-a:#211b38;--card-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-stat-card:nth-child(4){--card-a:#321c27;--card-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-stat-card:nth-child(5){--card-a:#302416;--card-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool{border-color:var(--mcr-line);background:linear-gradient(135deg,var(--tool-a,#121d2b),var(--tool-b,#111827));box-shadow:0 8px 20px rgba(0,0,0,.12)}
+:root[data-mcr-theme="dark"] .mcr-tool:nth-child(1){--tool-a:#102722;--tool-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool:nth-child(2){--tool-a:#12213a;--tool-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool:nth-child(3){--tool-a:#302416;--tool-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool:nth-child(4){--tool-a:#211b38;--tool-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool:nth-child(5){--tool-a:#10272d;--tool-b:#111827}
+:root[data-mcr-theme="dark"] .mcr-tool-icon{background:rgba(45,212,191,.08);border-color:color-mix(in srgb,var(--mcr-brand) 24%,var(--mcr-line))}
+:root[data-mcr-theme="dark"] .mcr-chart-card{background:linear-gradient(135deg,#121d2b,#111827);border-color:var(--mcr-line)}
+:root[data-mcr-theme="dark"] .mcr-hero-main,:root[data-mcr-theme="dark"] .mcr-live-card,:root[data-mcr-theme="dark"] .mcr-chart-card,:root[data-mcr-theme="dark"] .mcr-tool,:root[data-mcr-theme="dark"] .mcr-stat-card{box-shadow:0 10px 24px rgba(0,0,0,.13)}
+:root[data-mcr-theme="dark"] .mcr-menu-panel{box-shadow:0 18px 44px rgba(0,0,0,.38)}
+
+@media(max-width:760px){.mcr-actions .mcr-menu-toggle{width:auto;min-width:38px;padding:0 9px}.mcr-menu-title{display:none}.mcr-menu-panel{right:-1px}.mcr-toast{right:10px;top:116px}}
+
+
+/* =========================================================
+   v0.25 · WebApp Menu Stacking / Overlay Hotfix
+   The embedded protocol sticky navigation reaches z-index 150.
+   Elevate the host topbar/menu into a higher stacking context so
+   the dropdown always renders above protocol tabs and content.
+   ========================================================= */
+.mcr-topbar{
+  z-index:1000!important;
+  isolation:isolate;
+  overflow:visible!important;
+}
+.mcr-actions,
+.mcr-menu{
+  position:relative;
+  z-index:1100;
+  overflow:visible!important;
+}
+.mcr-menu-panel{
+  z-index:1200!important;
+  isolation:isolate;
+}
+.mcr-search-results{
+  z-index:1250!important;
+}
+/* Keep the primary app navigation above embedded content, but below
+   the open topbar menu/search overlays. */
+.mcr-nav{
+  z-index:900!important;
+}
+
+
+/* =========================================================
+   v0.26 · Canonical Desktop Canvas
+   One content geometry for Dashboard, ICD, Drug/Chemical,
+   YHCT, Coding Guides and Treatment Protocols.
+   ========================================================= */
+:root{
+  --mcr-shell-max:1360px;
+  --mcr-canvas-gutter:clamp(18px,2.25vw,34px);
+}
+
+/* Top-level views share the same desktop width and horizontal rhythm. */
+.mcr-section-head,
+.mcr-dashboard,
+.mcr-embedded-icd{
+  width:100%;
+  max-width:calc(var(--mcr-shell-max) + var(--mcr-dock-safe))!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  padding-left:var(--mcr-canvas-gutter)!important;
+  padding-right:calc(var(--mcr-canvas-gutter) + var(--mcr-dock-safe))!important;
+}
+
+/* Remove the historical compact Dashboard cap (1200/1060px). */
+.mcr-dashboard{
+  max-width:calc(var(--mcr-shell-max) + var(--mcr-dock-safe))!important;
+}
+
+/* The embedded ICD shell previously kept its own 1180px cap.
+   In the unified WebApp, the host canvas owns width instead. */
+.mcr-embedded-icd .nah-icd10-app{
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+}
+.mcr-embedded-icd .nah-icd10-overview,
+.mcr-embedded-icd .nah-icd10-subtabs,
+.mcr-embedded-icd .nah-icd10-grid,
+.mcr-embedded-icd .nah-icd10-layout,
+.mcr-embedded-icd .nah-icd10-pl3-grid,
+.mcr-embedded-icd .nah-icd10-yhct-grid,
+.mcr-embedded-icd .nah-icd10-guide-layout,
+.mcr-embedded-icd .nah-icd10-guide-grid{
+  width:100%!important;
+  max-width:none!important;
+  margin-left:0!important;
+  margin-right:0!important;
+}
+
+/* Protocol content uses the same 1360px reading canvas. */
+.mtp-embedded .mtp-home-head,
+.mtp-embedded .mtp-result-section,
+.mtp-embedded .mtp-protocol-page,
+.mtp-embedded .mtp-source-section{
+  width:100%;
+  max-width:var(--mcr-shell-max)!important;
+}
+
+/* Keep dashboard cards efficient when extra desktop width becomes available. */
+@media(min-width:1280px){
+  .mcr-hero{grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr)}
+  .mcr-stat-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .mcr-tools{grid-template-columns:repeat(5,minmax(0,1fr))}
+}
+
+/* Tablet/mobile keep existing single-column behavior and remove dock reserve. */
+@media(max-width:1100px){
+  :root{--mcr-dock-safe:0px;--mcr-shell-max:100%}
+  .mcr-section-head,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    max-width:100%!important;
+    padding-left:28px!important;
+    padding-right:28px!important;
+  }
+  .mtp-embedded .mtp-home-head,
+  .mtp-embedded .mtp-result-section,
+  .mtp-embedded .mtp-protocol-page,
+  .mtp-embedded .mtp-source-section{
+    max-width:100%!important;
+  }
+}
+@media(max-width:760px){
+  .mcr-section-head,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    padding-left:12px!important;
+    padding-right:12px!important;
+  }
+}
+
+
+/* =========================================================
+   v1.0 · Menu Layer Hardening + Product Footer
+   - The menu panel owns an opaque surface so lower navigation cannot bleed
+     visually through the dropdown.
+   - A strict host stacking contract keeps menu/search above every embedded
+     ICD/protocol sticky layer.
+   ========================================================= */
+.mcr-app{
+  isolation:isolate!important;
+}
+.mcr-topbar{
+  position:relative!important;
+  z-index:10000!important;
+  isolation:isolate!important;
+  overflow:visible!important;
+}
+.mcr-actions,
+.mcr-menu{
+  position:relative!important;
+  z-index:10010!important;
+  overflow:visible!important;
+}
+.mcr-menu-panel{
+  z-index:10020!important;
+  isolation:isolate!important;
+  background:var(--mcr-surface)!important;
+  opacity:1!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+  box-shadow:0 20px 48px rgba(15,23,42,.24)!important;
+}
+.mcr-search-results{
+  z-index:10030!important;
+}
+.mcr-nav{
+  position:relative!important;
+  z-index:1000!important;
+}
+.mcr-main{
+  z-index:0!important;
+}
+:root[data-mcr-theme="dark"] .mcr-menu-panel{
+  background:var(--mcr-surface)!important;
+  box-shadow:0 20px 48px rgba(0,0,0,.52)!important;
+}
+.mcr-footer{
+  flex:0 0 auto;
+  min-height:38px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding:8px calc(20px + var(--mcr-dock-safe)) 8px 20px;
+  border-top:1px solid var(--mcr-line);
+  background:var(--mcr-surface);
+  color:var(--mcr-muted);
+  font-size:12px;
+  line-height:1.45;
+  position:relative;
+  z-index:20;
+}
+.mcr-footer-meta{
+  text-align:right;
+}
+.mcr-footer strong{
+  color:var(--mcr-text);
+  font-weight:800;
+}
+@media(max-width:1100px){
+  .mcr-footer{padding-right:20px}
+}
+@media(max-width:760px){
+  .mcr-footer{
+    min-height:34px;
+    padding:7px 12px;
+    font-size:11px;
+  }
+}
+
+
+/* v1.0.1 · unified footer only */
+.mcr-embedded-icd .nah-icd10-footer,
+.nah-icd10-footer{display:none!important;}
+.mcr-footer{display:block!important;width:100%!important;text-align:right!important;padding:8px calc(20px + var(--mcr-dock-safe)) 8px 20px!important;}
+.mcr-footer-meta{display:block!important;width:100%!important;margin-left:auto!important;text-align:right!important;}
+@media(max-width:760px){
+  .mcr-footer{padding:7px 12px!important;}
+  .mcr-footer-meta{text-align:right!important;}
+}
+
+
+/* =========================================================
+   v2.0.7.8 · Header Menu Overlay Regression Guard
+   The host header/menu must remain above every embedded protocol sticky layer.
+   ========================================================= */
+.mcr-app{isolation:isolate!important}
+.mcr-topbar{position:relative!important;z-index:10000!important;overflow:visible!important;isolation:isolate!important}
+.mcr-actions,.mcr-menu{position:relative!important;z-index:10010!important;overflow:visible!important}
+.mcr-menu-panel{z-index:10020!important;background:var(--mcr-surface)!important;opacity:1!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.mcr-search-results{z-index:10030!important}
+.mcr-nav{position:relative!important;z-index:1000!important}
+.mcr-main{position:relative;z-index:0!important}
+
+/* ==========================================================================
+ * v2.0.8.15 — Unified Fullscreen Host Canvas
+ * Replaces legacy fixed 1240/1360px canvas and static dock reservation with
+ * the same host-token contract used by the two MEDIPHARM homepages.
+ * ========================================================================== */
+:root{
+  --mcr-unified-canvas-max:var(--med-host-canvas-max,clamp(1480px,90vw,3000px));
+  --mcr-unified-gutter:var(--med-host-gutter,clamp(20px,2.35vw,48px));
+  --mcr-unified-rail:var(--med-host-right-rail-safe,0px);
+}
+@media (min-width:1200px){
+  .mcr-section-head,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    width:min(var(--mcr-unified-canvas-max),calc(100vw - var(--mcr-unified-rail) - var(--mcr-unified-gutter) - var(--mcr-unified-gutter)))!important;
+    max-width:none!important;
+    margin-left:max(var(--mcr-unified-gutter),calc((100vw - var(--mcr-unified-rail) - var(--mcr-unified-canvas-max))/2))!important;
+    margin-right:0!important;
+    padding-left:0!important;
+    padding-right:0!important;
+    box-sizing:border-box!important;
+    min-width:0!important;
+  }
+  .mcr-dashboard > *,
+  .mcr-embedded-icd > *,
+  .mtp-embedded .mtp-home-head,
+  .mtp-embedded .mtp-result-section,
+  .mtp-embedded .mtp-protocol-page,
+  .mtp-embedded .mtp-source-section{
+    max-width:none!important;
+    min-width:0!important;
+    box-sizing:border-box!important;
+  }
+}
+@media (min-width:768px) and (max-width:1199px){
+  .mcr-section-head,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    width:calc(100vw - 24px)!important;
+    max-width:none!important;
+    margin-left:12px!important;
+    margin-right:0!important;
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+}
+@media (max-width:767px){
+  .mcr-section-head,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    width:100vw!important;
+    max-width:none!important;
+    margin-left:0!important;
+    margin-right:0!important;
+    padding-left:max(8px,env(safe-area-inset-left))!important;
+    padding-right:max(8px,env(safe-area-inset-right))!important;
+    box-sizing:border-box!important;
+  }
+  .mcr-view,
+  .mcr-dashboard,
+  .mcr-embedded-icd{
+    border-left:0!important;
+    border-right:0!important;
+    border-radius:0!important;
+  }
+}
+
+
+/* v2.0.8.21 · Tablet/mobile specialty drawer interaction contract */
+@media(max-width:1100px){
+  .mcr-view[data-mcr-panel="protocols"] .mtp-app.mtp-embedded .mtp-sidebar{
+    top:calc(var(--mcr-top) + 48px)!important;bottom:0!important;left:0!important;
+    z-index:320!important;pointer-events:auto!important;overflow-y:auto!important;
+    overscroll-behavior:contain;-webkit-overflow-scrolling:touch
+  }
+  .mcr-view[data-mcr-panel="protocols"] .mtp-app.mtp-embedded .mtp-overlay{
+    top:calc(var(--mcr-top) + 48px)!important;bottom:0!important;left:0!important;right:0!important;
+    z-index:310!important;pointer-events:none!important
+  }
+  .mcr-view[data-mcr-panel="protocols"] .mtp-app.mtp-embedded.mtp-drawer-open .mtp-overlay{pointer-events:auto!important}
+}
+@media(max-width:760px){
+  .mcr-view[data-mcr-panel="protocols"] .mtp-app.mtp-embedded .mtp-sidebar,
+  .mcr-view[data-mcr-panel="protocols"] .mtp-app.mtp-embedded .mtp-overlay{top:106px!important}
+}
+
+
+/* v2.0.8.22 · Three-module information architecture */
+.mcr-tools{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.mcr-embedded-icd .nah-icd10-module-tabs{
+  display:flex!important;
+  width:100%!important;
+  max-width:var(--mcr-shell-max)!important;
+  margin:0 auto 12px!important;
+  padding:0 0 3px!important;
+  overflow-x:auto!important;
+  scrollbar-width:none!important;
+}
+.mcr-embedded-icd .nah-icd10-module-tabs::-webkit-scrollbar{display:none!important}
+.mcr-embedded-icd .nah-icd10-module-tabs button{flex:0 0 auto!important}
+@media(max-width:520px){.mcr-tools{grid-template-columns:1fr!important}}
+
+
+/* =========================================================
+   v2.2 · Reader settings, guest quota & login surface
+   ========================================================= */
+.mcr-menu-panel{width:min(280px,calc(100vw - 24px))}
+.mcr-menu-font{padding:10px;border-top:1px solid var(--mcr-line);margin-top:3px;display:grid;gap:8px}
+.mcr-menu-font>span{font-size:12px;font-weight:750;color:var(--mcr-muted)}
+.mcr-menu-font>div{display:grid;grid-template-columns:54px 1fr 54px;gap:6px}
+.mcr-menu-font button{min-height:34px;border:1px solid var(--mcr-line);border-radius:9px;background:var(--mcr-surface-2);color:var(--mcr-text);font:inherit;font-weight:700;cursor:pointer}
+.mcr-menu-font button:hover{border-color:var(--mcr-brand);color:var(--mcr-brand)}
+.mcr-footer{display:grid!important;gap:4px!important}
+.mcr-footer-meta,.mcr-footer-guest{font-size:12.5px;line-height:1.55;color:var(--mcr-muted)}
+.mcr-footer-guest a,.mcr-footer-link{color:var(--mcr-brand);font:inherit;font-weight:750;text-decoration:none;background:none;border:0;padding:0;cursor:pointer}
+.mcr-footer-guest a:hover,.mcr-footer-link:hover{text-decoration:underline}
+.mcr-login-open{overflow:hidden}
+.mcr-login-modal{position:fixed;inset:0;z-index:12000;display:grid;place-items:center;padding:18px}
+.mcr-login-modal[hidden]{display:none!important}
+.mcr-login-backdrop{position:absolute;inset:0;background:rgba(2,6,23,.56);backdrop-filter:blur(3px)}
+.mcr-login-card{position:relative;z-index:1;width:min(440px,100%);padding:26px;border:1px solid var(--mcr-line);border-radius:18px;background:var(--mcr-surface);box-shadow:0 26px 70px rgba(15,23,42,.28)}
+.mcr-login-close{position:absolute;right:12px;top:10px;width:34px;height:34px;border:0;border-radius:9px;background:var(--mcr-surface-2);color:var(--mcr-text);font-size:22px;cursor:pointer}
+.mcr-login-mark{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:var(--mcr-brand);color:#fff;font-weight:850;margin-bottom:14px}
+.mcr-login-card h2{margin:0 0 6px;font-size:23px}.mcr-login-card>p{margin:0 0 18px;color:var(--mcr-muted)}
+.mcr-login-form{display:grid;gap:12px}.mcr-login-form label{display:grid;gap:6px;font-size:13px;font-weight:700}.mcr-login-form input{height:42px;border:1px solid var(--mcr-line);border-radius:10px;background:var(--mcr-surface-2);color:var(--mcr-text);padding:0 11px;font:inherit}.mcr-login-form button{height:42px;border:0;border-radius:10px;background:var(--mcr-brand);color:#fff;font:inherit;font-weight:800;cursor:pointer}.mcr-register-link{display:inline-block;margin-top:14px;color:var(--mcr-brand);font-weight:750;text-decoration:none}
+@media(max-width:760px){.mcr-footer{text-align:left!important;padding:9px 12px!important}.mcr-footer-meta,.mcr-footer-guest{text-align:left!important}.mcr-login-card{padding:22px 18px}}
+
+
+/* =========================================================
+   v2.3 · Account state control + Membership/Clinical Access handoff
+   ========================================================= */
+.mcr-actions{align-items:center}
+.mcr-account-button{position:relative!important;width:38px!important;min-width:38px!important;height:38px!important;padding:0!important;border:1px solid var(--mcr-line)!important;border-radius:11px!important;background:var(--mcr-surface)!important;color:var(--mcr-text)!important;display:inline-grid!important;place-items:center!important;text-decoration:none!important;overflow:visible!important}
+.mcr-account-button:hover,.mcr-account-button:focus-visible{border-color:color-mix(in srgb,var(--mcr-brand) 46%,var(--mcr-line))!important;color:var(--mcr-brand)!important;outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--mcr-brand) 10%,transparent)}
+.mcr-account-icon{width:21px;height:21px;display:grid;place-items:center}
+.mcr-account-icon svg{width:21px;height:21px;display:block;fill:currentColor}
+.mcr-account-button.is-authenticated{background:var(--mcr-brand)!important;border-color:var(--mcr-brand)!important;color:#fff!important}
+.mcr-account-button.is-authenticated:hover,.mcr-account-button.is-authenticated:focus-visible{color:#fff!important;filter:brightness(1.05)}
+.mcr-account-badge{position:absolute;right:-4px;top:-4px;width:16px;height:16px;border-radius:999px;display:grid;place-items:center;background:var(--mcr-brand);color:#fff;border:2px solid var(--mcr-surface);font-size:12px;font-weight:900;line-height:1;box-shadow:0 2px 6px rgba(15,23,42,.16)}
+.mcr-menu-account-icon{font-size:11px}
+.mcr-menu-logout{color:var(--mcr-red)!important}
+.mcr-menu-logout .mcr-menu-icon{color:var(--mcr-red)!important;background:color-mix(in srgb,var(--mcr-red) 9%,var(--mcr-surface))!important}
+.mcr-menu-logout:hover,.mcr-menu-logout:focus-visible{color:var(--mcr-red)!important;background:color-mix(in srgb,var(--mcr-red) 7%,var(--mcr-surface))!important}
+@media(max-width:760px){.mcr-account-button{width:36px!important;min-width:36px!important;height:36px!important;border-radius:10px!important}.mcr-account-icon,.mcr-account-icon svg{width:20px;height:20px}.mcr-account-badge{right:-3px;top:-4px}}
+
+
+/* =========================================================
+   v2.4 · Authenticated account popover
+   ========================================================= */
+.mcr-account-menu{position:relative;display:inline-flex;align-items:center}
+.mcr-account-panel{position:absolute;right:0;top:calc(100% + 9px);z-index:10030;width:min(230px,calc(100vw - 24px));padding:7px;display:grid;gap:3px;border:1px solid var(--mcr-line);border-radius:14px;background:var(--mcr-surface);box-shadow:0 18px 44px rgba(15,23,42,.18)}
+.mcr-account-panel[hidden]{display:none!important}
+.mcr-account-panel-item{min-height:42px;padding:0 10px;border-radius:10px;display:flex;align-items:center;gap:10px;color:var(--mcr-text);font-weight:750;text-decoration:none}
+.mcr-account-panel-item:hover,.mcr-account-panel-item:focus-visible{background:var(--mcr-surface-2);outline:none}
+.mcr-account-panel-icon{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--mcr-surface-2);color:var(--mcr-brand);font-size:11px}
+.mcr-account-panel-logout{color:var(--mcr-red)}
+.mcr-account-panel-logout .mcr-account-panel-icon{color:var(--mcr-red);background:color-mix(in srgb,var(--mcr-red) 9%,var(--mcr-surface))}
+:root[data-mcr-theme="dark"] .mcr-account-panel{box-shadow:0 18px 44px rgba(0,0,0,.38)}
+@media(max-width:760px){.mcr-account-panel{right:-2px;width:min(228px,calc(100vw - 20px))}}
+
+/* =========================================================
+   v2.9 · Mobile Reading Canvas Compaction
+   - Maximize clinical reading viewport on phones.
+   - No persistent footer / guest counter.
+   - Compact host header + module navigation.
+   ========================================================= */
+.mcr-footer{display:none!important}
+@media(max-width:760px){
+  :root{--mcr-top:48px}
+  .mcr-topbar{
+    height:48px!important;min-height:48px!important;
+    grid-template-columns:34px minmax(0,1fr) auto!important;
+    gap:6px!important;padding:0 7px!important
+  }
+  .mcr-mark{width:32px!important;height:32px!important;border-radius:10px!important;font-size:17px!important;box-shadow:none!important}
+  .mcr-global-search{height:36px!important;border-radius:11px!important}
+  .mcr-global-search>span{left:11px!important;font-size:18px!important}
+  .mcr-global-search input{padding:0 34px 0 34px!important;font-size:12.5px!important}
+  .mcr-global-search button{right:4px!important;width:28px!important;height:28px!important;font-size:18px!important}
+  .mcr-actions{gap:4px!important}
+  .mcr-actions .mcr-menu-toggle,.mcr-account-button{width:34px!important;min-width:34px!important;height:34px!important;border-radius:10px!important;padding:0!important}
+  .mcr-account-icon,.mcr-account-icon svg{width:18px!important;height:18px!important}
+  .mcr-account-badge{width:14px!important;height:14px!important;right:-2px!important;top:-3px!important;font-size:10px!important;border-width:2px!important}
+  .mcr-menu-glyph{font-size:19px!important}
+  .mcr-nav{height:40px!important;min-height:40px!important;padding:0 5px!important;gap:2px!important;justify-content:stretch!important}
+  .mcr-nav button{flex:1 1 0!important;min-width:0!important;padding:6px 5px!important;border-radius:8px!important;font-size:11.5px!important;line-height:1.15!important;text-align:center!important}
+  .mcr-search-results{top:48px!important}
+  .mtp-embedded .mtp-sidebar{top:88px!important}
+}
+@media(max-width:760px){.mcr-toast{top:94px!important;right:8px!important}}
+
+
+/* v3.0 · font control lives in the protocol compact toolbar on phones */
+@media(max-width:640px){.mcr-menu-font{display:none!important}}
+\n\n/* =========================================================\n   v3.5.10 · Tablet menu geometry & independent PWA install\n   ========================================================= */\n#mcr-menu-panel.mcr-menu-panel{\n  max-height:min(620px,calc(100dvh - 76px))!important;\n  overflow-y:auto!important;\n  overscroll-behavior:contain;\n  scrollbar-gutter:stable;\n}\n#mcr-menu-panel #mcr-install{display:flex!important}\n#mcr-menu-panel #mcr-install[hidden]{display:none!important}\n#mcr-menu-panel #mcr-install>span{display:inline!important;white-space:nowrap!important}\n.mcr-menu-font>div{grid-template-columns:54px minmax(104px,1fr) 54px!important}\n.mcr-menu-font button{\n  min-width:0!important;\n  padding-inline:8px!important;\n  white-space:nowrap!important;\n  word-break:keep-all!important;\n  overflow-wrap:normal!important;\n}\n@media (min-width:641px) and (max-width:1366px){\n  #mcr-menu-panel.mcr-menu-panel{\n    width:min(300px,calc(100vw - 20px))!important;\n    right:0!important;\n  }\n  .mcr-menu-font{padding:10px 8px!important}\n}\n@media (max-height:760px){\n  #mcr-menu-panel.mcr-menu-panel{max-height:calc(100dvh - 64px)!important}\n}\n
+/* =========================================================
+   v3.5.11 · Square-tablet menu + install visibility hardening
+   - Keep WebApp installation action visible in every host mode.
+   - Give the default font-size action a fixed single-line lane.
+   ========================================================= */
+#mcr-menu-panel #mcr-install,
+#mcr-menu-panel #mcr-install[hidden]{
+  display:flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+#mcr-menu-panel #mcr-install>span:last-child{
+  display:block!important;
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
+.mcr-menu-font>div{
+  grid-template-columns:52px minmax(96px,112px) 52px!important;
+  justify-content:space-between!important;
+  align-items:stretch!important;
+  width:100%!important;
+}
+.mcr-menu-font button[data-mcr-font="0"]{
+  min-width:96px!important;
+  width:auto!important;
+  white-space:nowrap!important;
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+  line-height:1!important;
+  font-size:12px!important;
+  padding-inline:6px!important;
+}
+@media (min-width:641px) and (max-width:1100px),
+       (min-width:641px) and (hover:none) and (pointer:coarse) and (max-width:1366px){
+  #mcr-menu-panel.mcr-menu-panel{
+    width:min(320px,calc(100vw - 18px))!important;
+  }
+}

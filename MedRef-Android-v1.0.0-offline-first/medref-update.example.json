@@ -1,0 +1,7 @@
+{
+  "schema": "medref-android-update/v1",
+  "versionCode": 10000,
+  "versionName": "1.0.0",
+  "downloadUrl": "https://github.com/lesangmd/medref-releases/releases/latest/download/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk",
+  "minimumDataApiVersion": "3.5.25"
+}

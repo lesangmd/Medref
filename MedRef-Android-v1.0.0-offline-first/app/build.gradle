@@ -1,0 +1,49 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.medipharm.medref'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.medipharm.medref'
+        minSdk 31
+        targetSdk 35
+        versionCode 10000
+        versionName '1.0.0'
+        buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/lesangmd/medref-releases/main/medref-update.json"'
+    }
+
+    def releaseKeystorePath = System.getenv('MEDREF_KEYSTORE_PATH')
+    def releaseStorePassword = System.getenv('MEDREF_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('MEDREF_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('MEDREF_KEY_PASSWORD')
+    def hasReleaseSigning = releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug' }
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (hasReleaseSigning) signingConfig signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    packaging { resources { excludes += ['/META-INF/{AL2.0,LGPL2.1}'] } }
+}
+
+dependencies { }

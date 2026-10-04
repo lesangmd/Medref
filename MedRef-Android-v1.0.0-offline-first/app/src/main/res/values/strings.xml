@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MedRef</string>
+    <string name="splash_title">MedRef</string>
+    <string name="splash_subtitle">MEDIPHARM Clinical Reference</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="medref_white">#FFFFFF</color>
+    <color name="medref_ink">#12253A</color>
+    <color name="medref_muted">#61727F</color>
+    <color name="medref_primary">#0B7C82</color>
+    <color name="medref_icon_background">#FFFFFF</color>
+</resources>

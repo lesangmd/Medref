@@ -1,0 +1,40 @@
+{
+  "artifact": "MedRef-Android-v1.0.0-OFFLINE-FIRST-source.zip",
+  "app_name": "MedRef",
+  "application_id": "com.medipharm.medref",
+  "version_name": "1.0.0",
+  "version_code": 10000,
+  "min_sdk": 31,
+  "target_sdk": 35,
+  "compile_sdk": 35,
+  "java": "17",
+  "server_minimum": "MEDIPHARM Clinical Reference v3.5.25",
+  "offline_architecture": {
+    "local_origin": "https://app.medref.local",
+    "database": "SQLite",
+    "slots": [
+      "active",
+      "staging",
+      "previous-good"
+    ],
+    "first_login_online_required": true,
+    "offline_session_days": 30,
+    "sync": "manifest check + full snapshot on data_version change",
+    "media_integrity": "SHA-256",
+    "future_delta_schema": "medref-offline-delta/v1"
+  },
+  "static_checks": {
+    "release": "MedRef Android v1.0.0",
+    "checks": 16,
+    "passed": 16,
+    "failed": [],
+    "status": "PASS"
+  },
+  "javascript_syntax": "PASS",
+  "xml_well_formed": "PASS",
+  "java_parser_syntax_screen": "PASS",
+  "gradle_compile": "NOT_RUN_IN_CURRENT_ENVIRONMENT",
+  "signed_apk": "NOT_PRODUCED",
+  "blocking_errors": [],
+  "release_status": "SOURCE_CANDIDATE_READY_FOR_CI_COMPILE_SIGN_AND_DEVICE_TEST"
+}

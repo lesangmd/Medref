@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b6674">
+<title>MedRef — MEDIPHARM Clinical Reference</title>
+<link rel="icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/mcr-app.css">
+<link rel="stylesheet" href="/assets/nah-icd10.css">
+<link rel="stylesheet" href="/assets/mtp-app.css">
+<script src="/assets/offline-bootstrap.js"></script>
+</head>
+<body class="mcr-body">
+<div id="mcr-app" class="mcr-app" data-view="dashboard">
+  <header class="mcr-topbar">
+    <a class="mcr-brand" href="/medipharm/" data-mcr-view="dashboard">
+      <span class="mcr-mark">M</span><span><strong>MEDIPHARM</strong><small>ICD-10 &amp; CLINICAL DESK REFERENCE</small></span>
+    </a>
+    <form class="mcr-global-search" id="mcr-search-form" role="search">
+      <span aria-hidden="true">⌕</span><input id="mcr-search" type="search" autocomplete="off" placeholder="Tìm bệnh, ICD-10…"><button type="button" id="mcr-search-clear" aria-label="Xóa">×</button>
+    </form>
+    <div class="mcr-actions">
+      <div class="mcr-account-menu">
+        <button type="button" class="mcr-account-button is-authenticated" id="mcr-account-toggle" data-mcr-account-toggle aria-haspopup="menu" aria-expanded="false" aria-controls="mcr-account-panel" aria-label="Tài khoản" title="Tài khoản">
+          <span class="mcr-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 12.25a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5Zm0 2c-4.13 0-7.5 2.38-7.5 5.3 0 .39.31.7.7.7h13.6c.39 0 .7-.31.7-.7 0-2.92-3.37-5.3-7.5-5.3Z"/></svg></span>
+        </button>
+        <div id="mcr-account-panel" class="mcr-account-panel" role="menu" hidden>
+          <a class="mcr-account-panel-item" href="https://www.sachyhoc.com/tai-khoan/" role="menuitem"><span class="mcr-account-panel-icon" aria-hidden="true">●</span><span>Thông tin tài khoản</span></a>
+          <a class="mcr-account-panel-item mcr-account-panel-logout" href="medref://logout" role="menuitem"><span class="mcr-account-panel-icon" aria-hidden="true">↪</span><span>Đăng xuất</span></a>
+        </div>
+      </div>
+      <div class="mcr-menu">
+        <button type="button" id="mcr-menu-toggle" class="mcr-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="mcr-menu-panel"><span class="mcr-menu-glyph" aria-hidden="true">☰</span><span class="mcr-menu-title">Menu</span></button>
+        <div id="mcr-menu-panel" class="mcr-menu-panel" role="menu" hidden>
+          <a class="mcr-menu-item" href="/medipharm/" role="menuitem"><span class="mcr-menu-icon" aria-hidden="true">⌂</span><span>Trang chủ MedRef</span></a>
+          <button type="button" id="mcr-theme" class="mcr-menu-item" role="menuitem" aria-label="Bật chế độ tối"><span class="mcr-menu-icon" aria-hidden="true">◐</span><span data-mcr-theme-label>Chế độ Tối</span></button>
+          <button type="button" id="mcr-install" class="mcr-menu-item" role="menuitem"><span class="mcr-menu-icon" aria-hidden="true">⇩</span><span>Cài Ứng dụng</span></button>
+          <div class="mcr-menu-font" role="group" aria-label="Cỡ chữ nội dung phác đồ"><span>Cỡ chữ nội dung</span><div><button type="button" data-mcr-font="-1" aria-label="Giảm cỡ chữ">A−</button><button type="button" data-mcr-font="0">Mặc định</button><button type="button" data-mcr-font="1" aria-label="Tăng cỡ chữ">A+</button></div></div>
+        </div>
+      </div>
+    </div>
+    <div id="mcr-toast" class="mcr-toast" role="status" aria-live="polite" hidden></div>
+  </header>
+  <nav class="mcr-nav" aria-label="Module MEDIPHARM">
+    <button data-mcr-view="dashboard">Trang chủ</button>
+    <button data-mcr-view="protocols">Phác đồ</button>
+    <button data-mcr-view="procedures">Quy trình</button>
+    <button data-mcr-view="icd">ICD-10</button>
+  </nav>
+  <div id="mcr-search-results" class="mcr-search-results" hidden></div>
+  <main class="mcr-main">
+    <section class="mcr-view" data-mcr-panel="dashboard"><div id="mcr-dashboard" class="mcr-dashboard"><div class="mcr-loading">Đang mở dữ liệu cục bộ…</div></div></section>
+    <section class="mcr-view" data-mcr-panel="icd">
+      <div class="mcr-section-head"><div><span>Mã bệnh &amp; mã hóa</span><h1>ICD-10</h1><p>Tra cứu ICD-10, thuốc/hóa chất, mã bệnh YHCT và hướng dẫn mã hóa từ dữ liệu MedRef trên thiết bị.</p></div></div>
+      <div class="mcr-embedded-icd">
+        <section class="nah-icd10-app nah-icd10-variant-webapp" data-nah-icd10-app data-nah-icd10-version="offline" data-nah-icd10-api="/wp-json/nah-icd10/v1" lang="vi">
+          <header class="nah-icd10-header" aria-label="Thanh công cụ ICD-10">
+            <a class="nah-icd10-brand" href="/medipharm/?view=icd" aria-label="ICD-10"><span class="nah-icd10-logo" aria-hidden="true"><span class="nah-icd10-logo-word">ICD</span><span class="nah-icd10-logo-ten">10</span><span class="nah-icd10-logo-cross"></span></span></a>
+            <form class="nah-icd10-header-search" data-icd10-search-form role="search"><span class="nah-icd10-search-icon" aria-hidden="true">⌕</span><input id="nah-icd10-q-offline" type="search" data-icd10-query autocomplete="off" placeholder="Tìm mã hoặc tên bệnh: E11, I10, ĐTĐ, tăng huyết áp..."><button type="submit" class="nah-icd10-search-submit">Tìm</button></form>
+            <div class="nah-icd10-header-actions"><a class="nah-icd10-header-action" href="/medipharm/"><span>Trang chủ</span></a><button type="button" class="nah-icd10-header-action nah-icd10-theme-toggle" data-icd10-theme-toggle aria-pressed="false"><span data-icd10-theme-label>Chế độ tối</span></button><a class="nah-icd10-header-action nah-icd10-account-action" href="https://www.sachyhoc.com/tai-khoan/"><span>Tài khoản</span></a></div>
+          </header>
+          <nav class="nah-icd10-module-tabs" aria-label="Nhóm công cụ ICD-10"><button type="button" class="is-active" data-icd10-tab="icd">Tra cứu ICD-10</button><button type="button" data-icd10-tab="pl3">Thuốc/Hóa chất</button><button type="button" data-icd10-tab="yhct">Mã bệnh YHCT</button><button type="button" data-icd10-tab="guides">Hướng dẫn mã hóa</button></nav>
+          <div class="nah-icd10-overview" aria-label="Thống kê dữ liệu ICD-10"><span><b>—</b><small>Mã ICD hiệu lực</small></span><span><b>—</b><small>Mã bị hủy</small></span><span><b>—</b><small>Dòng PL3</small></span></div>
+          <div class="nah-icd10-tab-panel is-active" data-icd10-panel="icd">
+            <div class="nah-icd10-searchbox nah-icd10-filter-panel">
+              <div class="nah-icd10-search-head"><label class="nah-icd10-primary-toggle"><input type="checkbox" data-primary-mode> <span>Chỉ mã Bệnh chính</span></label><div class="nah-icd10-view-toggle" role="group"><button type="button" class="is-active" data-view-mode="readable">Dễ đọc</button><button type="button" data-view-mode="compact">Gọn</button></div></div>
+              <div class="nah-icd10-filters" data-icd10-filters><button type="button" class="is-active" data-icd10-filter="all">Tất cả</button><button type="button" data-icd10-filter="primary">Có thể dùng làm bệnh chính</button><button type="button" data-icd10-filter="not_primary">Không dùng bệnh chính</button><button type="button" data-icd10-filter="specific">Cần mã cụ thể hơn</button><button type="button" data-icd10-filter="cancelled">Mã bị hủy</button><button type="button" data-icd10-filter="gender">Theo giới tính</button><button type="button" data-icd10-filter="death">Mã tử vong</button></div>
+              <button type="button" class="nah-icd10-detail-toggle" data-detail-toggle>Bộ lọc chi tiết</button>
+              <div class="nah-icd10-detail-filters" data-detail-filters hidden><button type="button" data-icd10-filter="new">Mã mới TT06</button><button type="button" data-icd10-filter="not_recommended">Không khuyến khích</button><button type="button" data-icd10-filter="female">Chỉ nữ</button><button type="button" data-icd10-filter="male">Chỉ nam</button><button type="button" data-icd10-filter="cause">Căn nguyên †</button><button type="button" data-icd10-filter="star">Biểu hiện *</button></div>
+              <div class="nah-icd10-primary-note" data-primary-note hidden>Chế độ bệnh chính giúp giảm nguy cơ chọn nhầm mã bị hủy hoặc mã không dùng làm bệnh chính.</div>
+            </div>
+            <div class="nah-icd10-layout"><main class="nah-icd10-results-wrap"><div class="nah-icd10-hint">Nhập mã hoặc tên bệnh vào thanh tìm kiếm.</div><div class="nah-icd10-results" data-icd10-results aria-live="polite"></div></main><aside class="nah-icd10-checker"><div class="nah-icd10-checker-title">Kiểm tra bệnh chính</div><p class="nah-icd10-checker-desc">Đánh giá nhanh một mã ICD-10 trước khi ghi vào trường bệnh chính.</p><form data-icd10-check-form><label>Mã ICD-10<input type="text" data-check-code placeholder="Ví dụ E11.9"></label><label>Giới tính<select data-check-gender><option value="">Không xét</option><option value="male">Nam</option><option value="female">Nữ</option></select></label><label>Loại hồ sơ<select data-check-record-type><option value="clinical">Khám/chữa bệnh</option><option value="death">Nguyên nhân tử vong</option></select></label><button type="submit">Kiểm tra</button></form><div class="nah-icd10-check-output" data-icd10-check-output></div></aside></div>
+          </div>
+          <div class="nah-icd10-tab-panel" data-icd10-panel="pl3" hidden><div class="nah-icd10-searchbox"><div class="nah-icd10-panel-heading"><strong>Tra cứu PL3 thuốc/hóa chất</strong><span>Dữ liệu đã tải trên thiết bị.</span></div><form data-pl3-search-form><input type="search" data-pl3-query placeholder="Tên thuốc/hóa chất hoặc mã T/X/Y"><button type="submit">Tìm</button></form></div><div class="nah-icd10-results" data-pl3-results aria-live="polite"></div></div>
+          <div class="nah-icd10-tab-panel" data-icd10-panel="yhct" hidden><div class="nah-icd10-searchbox"><div class="nah-icd10-panel-heading"><strong>Tra cứu mã bệnh Y học cổ truyền</strong><span>Dữ liệu YHCT cục bộ.</span></div><form data-yhct-search-form><input type="search" data-yhct-query placeholder="Tìm bệnh danh YHCT, mã U, huyệt, kỹ thuật..."><button type="submit">Tìm</button></form><div class="nah-icd10-filters" data-yhct-filters><button type="button" class="is-active" data-yhct-filter="all">Tất cả</button><button type="button" data-yhct-filter="pl1">PL I - Bệnh danh</button><button type="button" data-yhct-filter="pl2">PL II - Chẩn đoán</button><button type="button" data-yhct-filter="pl3">PL III - Huyệt</button><button type="button" data-yhct-filter="pl4">PL IV - Kỹ thuật</button></div></div><div class="nah-icd10-results" data-yhct-results aria-live="polite"></div></div>
+          <div class="nah-icd10-tab-panel" data-icd10-panel="guides" hidden><div class="nah-icd10-searchbox"><div class="nah-icd10-guide-tabs"><button type="button" class="is-active" data-guide-part="pl1">PL1 - Chương &amp; khối</button><button type="button" data-guide-part="pl2">PL2 - Nguyên tắc mã hóa</button></div><form data-guide-search-form><input type="search" data-guide-query placeholder="Tìm Chương, khối, dải mã hoặc nguyên tắc mã hóa..."><button type="submit">Tìm</button></form></div><div class="nah-icd10-results" data-guide-results aria-live="polite"></div></div>
+        </section>
+      </div>
+    </section>
+    <section class="mcr-view" data-mcr-panel="protocols"><div id="mtp-app" class="mtp-app"><div class="mtp-boot"><div class="mtp-boot-mark">M</div><div><strong>Thư viện lâm sàng MEDIPHARM</strong><span>Đang mở dữ liệu cục bộ…</span></div></div></div></section>
+  </main>
+</div>
+<script src="/assets/nah-icd10.js"></script>
+<script src="/assets/mtp-app.js"></script>
+<script src="/assets/mcr-app.js"></script>
+</body>
+</html>
