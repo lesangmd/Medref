@@ -269,7 +269,6 @@ public final class MedRefDataRuntime {
     }
 
     private void hydrateMediaParallel(List<JSONObject> items,String cookie,String nonce,File mediaDir,Progress progress)throws Exception{
-        cookieForFallback=cookie==null?"":cookie;cookieNonceFallback=nonce==null?"":nonce;
         int workers=Math.max(1,Math.min(4,items.size()));
         ExecutorService pool=Executors.newFixedThreadPool(workers);
         List<Future<?>> futures=new ArrayList<>();
