@@ -671,3 +671,63 @@ html,body,.mcr-app,button,input{font-size:14px}
     width:min(320px,calc(100vw - 18px))!important;
   }
 }
+
+
+/* =========================================================
+   MedRef Android v1.0.5 · Account popover geometry
+   - Prevent generic .mcr-actions anchor rules from collapsing
+     authenticated account rows on foldables and narrow layouts.
+   ========================================================= */
+.mcr-actions .mcr-account-menu{position:relative!important;display:inline-flex!important;align-items:center!important}
+.mcr-actions .mcr-account-panel{
+  box-sizing:border-box!important;
+  right:0!important;
+  left:auto!important;
+  width:250px!important;
+  min-width:250px!important;
+  max-width:calc(100vw - 16px)!important;
+  padding:8px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:4px!important;
+}
+.mcr-actions .mcr-account-panel[hidden]{display:none!important}
+.mcr-actions .mcr-account-panel .mcr-account-panel-item{
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:46px!important;
+  padding:0 12px!important;
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  gap:10px!important;
+  border:0!important;
+  border-radius:10px!important;
+  white-space:nowrap!important;
+  line-height:1.25!important;
+  text-align:left!important;
+}
+.mcr-actions .mcr-account-panel .mcr-account-panel-icon{
+  flex:0 0 26px!important;
+  width:26px!important;
+  min-width:26px!important;
+  height:26px!important;
+  padding:0!important;
+}
+.mcr-actions .mcr-account-panel .mcr-account-panel-item>span:last-child{
+  flex:1 1 auto!important;
+  min-width:0!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+@media(max-width:760px){
+  .mcr-actions .mcr-account-panel{
+    right:-2px!important;
+    width:min(250px,calc(100vw - 16px))!important;
+    min-width:min(220px,calc(100vw - 16px))!important;
+  }
+}
