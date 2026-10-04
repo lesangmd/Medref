@@ -1,10 +1,10 @@
 {
   "schema": "medref-app-update/v1",
-  "versionCode": 10005,
-  "versionName": "1.0.5",
+  "versionCode": 10006,
+  "versionName": "1.0.6",
   "minimumAndroidApi": 31,
-  "downloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.5.apk",
-  "sha256": "95a0f930a593cecc2ff5ac20085eb5f67bddc192a72d932a5901289af4d58f9d",
-  "bytes": 301335,
-  "release": "User-Facing About & Account Popover Layout Hotfix"
+  "downloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.6.apk",
+  "sha256": "bcce9bf76ba0c21b6cdf6d553d0586c0e7aa95627f96876e9530c1ed313c3ae6",
+  "bytes": 306176,
+  "release": "Session Re-auth Without Full Rehydration"
 }
