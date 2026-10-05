@@ -3,8 +3,10 @@
   "versionCode": 10006,
   "versionName": "1.0.6",
   "minimumAndroidApi": 31,
-  "downloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.6.apk",
+  "downloadUrl": "https://github.com/lesangmd/Medref/releases/latest/download/MedRef-latest.apk",
   "sha256": "bcce9bf76ba0c21b6cdf6d553d0586c0e7aa95627f96876e9530c1ed313c3ae6",
   "bytes": 305431,
-  "release": "Session Re-auth Without Full Rehydration"
+  "release": "Session Re-auth Without Full Rehydration",
+  "sourceDownloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.6.apk",
+  "githubReleaseUrl": "https://github.com/lesangmd/Medref/releases/latest"
 }
