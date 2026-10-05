@@ -1,0 +1,62 @@
+name: Publish MedRef Android APK
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/publish-medref-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERSION: "1.0.6"
+      VERSION_CODE: "10006"
+      APK_SHA256: "bcce9bf76ba0c21b6cdf6d553d0586c0e7aa95627f96876e9530c1ed313c3ae6"
+      SOURCE_APK_URL: "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.6.apk"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download signed APK from MEDIPHARM release channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          curl --fail --location --retry 3 --retry-delay 3 \
+            --output "dist/MedRef-v${VERSION}.apk" "${SOURCE_APK_URL}"
+          printf '%s  %s\n' "${APK_SHA256}" "dist/MedRef-v${VERSION}.apk" | sha256sum -c -
+          cp "dist/MedRef-v${VERSION}.apk" "dist/MedRef-latest.apk"
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="medref-v${VERSION}"
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "MedRef Android v${VERSION}" --latest
+          else
+            gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "MedRef Android v${VERSION}" --latest \
+              --notes "MedRef Android v${VERSION} (versionCode ${VERSION_CODE}). Production-signed APK. SHA-256: ${APK_SHA256}"
+          fi
+          gh release upload "${TAG}" \
+            "dist/MedRef-v${VERSION}.apk#MedRef-v${VERSION}.apk" \
+            "dist/MedRef-latest.apk#MedRef-latest.apk" \
+            --repo "${GITHUB_REPOSITORY}" --clobber
+
+      - name: Verify release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "medref-v${VERSION}" --repo "${GITHUB_REPOSITORY}" \
+            --json tagName,isLatest,name,assets,url
