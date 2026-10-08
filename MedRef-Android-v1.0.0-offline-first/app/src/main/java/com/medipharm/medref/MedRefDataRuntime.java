@@ -38,6 +38,37 @@ import java.util.zip.ZipInputStream;
 public final class MedRefDataRuntime {
     public interface ProgressListener { void onProgress(int percent, String message); }
 
+    public static final class UpdatePlan {
+        public final JSONObject remote;
+        public final ArrayList<String> changedDatasets;
+        public final boolean runtimeChanged;
+        public final boolean mediaChanged;
+        public final boolean fullHydrate;
+        UpdatePlan(JSONObject remote,ArrayList<String> changedDatasets,boolean runtimeChanged,boolean mediaChanged,boolean fullHydrate){
+            this.remote=remote;this.changedDatasets=changedDatasets;this.runtimeChanged=runtimeChanged;this.mediaChanged=mediaChanged;this.fullHydrate=fullHydrate;
+        }
+        public boolean hasChanges(){return fullHydrate||runtimeChanged||mediaChanged||!changedDatasets.isEmpty();}
+        public int remoteCount(String key){JSONObject d=remote.optJSONObject("datasets");JSONObject x=d==null?null:d.optJSONObject(key);return x==null?-1:x.optInt("count",-1);}
+        public String summary(){
+            ArrayList<String> labels=new ArrayList<>();
+            for(String k:changedDatasets){
+                if("protocols".equals(k))labels.add("Phác đồ / Quy trình");
+                else if("icd".equals(k))labels.add("ICD-10");
+                else if("pl3".equals(k))labels.add("Danh mục thuốc");
+                else if("yhct".equals(k))labels.add("YHCT");
+                else if("guides".equals(k))labels.add("Hướng dẫn mã hóa");
+                else if("synonyms".equals(k))labels.add("Từ đồng nghĩa");
+                else labels.add(k);
+            }
+            if(runtimeChanged)labels.add("Dữ liệu giao diện");
+            if(mediaChanged)labels.add("Hình / Bảng nguồn");
+            if(labels.isEmpty())return "Không có dữ liệu mới.";
+            StringBuilder b=new StringBuilder();
+            for(int i=0;i<labels.size();i++){if(i>0)b.append("\n");b.append("• ").append(labels.get(i));}
+            return b.toString();
+        }
+    }
+
     public static final String REMOTE_ROOT = "https://www.sachyhoc.com";
     public static final String OFFLINE_BASE = REMOTE_ROOT + "/wp-json/medipharm-reference/v1/offline/";
     public static final String MCR_BASE = REMOTE_ROOT + "/wp-json/medipharm-reference/v1/";
@@ -108,39 +139,65 @@ public final class MedRefDataRuntime {
         return session;
     }
 
-    public synchronized boolean syncIfChanged(String cookie, String nonce, ProgressListener listener) throws Exception {
+    public synchronized UpdatePlan checkForUpdates(String cookie,String nonce)throws Exception{
         JSONObject remote=fetchRemoteManifest(cookie,nonce);
         markAuthVerified();
+        ArrayList<String> changed=new ArrayList<>();
         if(!hasActiveData()){
-            hydrateWithManifest(remote,cookie,nonce,listener);
-            return true;
+            for(String k:new String[]{"protocols","icd","pl3","yhct","guides","synonyms"})changed.add(k);
+            return new UpdatePlan(remote,changed,true,true,true);
         }
-
         JSONObject local=readJson(new File(active,"data-manifest.json"));
-        String wanted=remote.optString("data_version","");
-        String localVersion=local.optString("data_version","");
-        String legacy=remote.optString("legacy_data_version","");
-        boolean clinicalSame=wanted.equals(localVersion)||(!legacy.isEmpty()&&legacy.equals(localVersion));
-
+        MedRefDatabase db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+        try{
+            JSONObject remoteDs=remote.optJSONObject("datasets");
+            JSONObject localDs=local.optJSONObject("datasets");
+            for(String key:new String[]{"protocols","icd","pl3","yhct","guides","synonyms"}){
+                JSONObject rd=remoteDs==null?null:remoteDs.optJSONObject(key);
+                JSONObject ld=localDs==null?null:localDs.optJSONObject(key);
+                if(rd==null)continue;
+                String rr=rd.optString("revision","");
+                String lr=ld==null?"":ld.optString("revision","");
+                boolean different;
+                if(!rr.isEmpty()&&!lr.isEmpty())different=!rr.equals(lr);
+                else{
+                    String compat=rd.optString("compat_signature","");
+                    String localCompat=db.compatSignature(key);
+                    if(!compat.isEmpty()&&!localCompat.isEmpty())different=!compat.equals(localCompat);
+                    else different=rd.optInt("count",-1)!=db.datasetCount(key);
+                }
+                if(different)changed.add(key);
+            }
+        }finally{db.close();}
         String remoteMedia=remote.optString("media_catalog_sha256","");
         String localMedia=local.optString("media_catalog_sha256","");
-        int remoteMediaCount=datasetCount(remote,"media",-1);
-        int localMediaCount=datasetCount(local,"media",-2);
-        boolean mediaSame=!remoteMedia.isEmpty()&&!localMedia.isEmpty()
-                ? remoteMedia.equals(localMedia)
-                : (remoteMediaCount>=0&&remoteMediaCount==localMediaCount);
+        boolean mediaChanged=!remoteMedia.isEmpty()&&!remoteMedia.equals(localMedia);
+        String remoteRuntime=remote.optString("runtime_revision","");
+        String localRuntime=local.optString("runtime_revision","");
+        boolean runtimeChanged;
+        if(!remoteRuntime.isEmpty()&&!localRuntime.isEmpty())runtimeChanged=!remoteRuntime.equals(localRuntime);
+        else runtimeChanged=changed.contains("protocols")||changed.contains("icd");
+        UpdatePlan plan=new UpdatePlan(remote,changed,runtimeChanged,mediaChanged,false);
+        if(!plan.hasChanges())mergeRemoteManifestMetadata(local,remote);
+        return plan;
+    }
 
-        if(clinicalSame&&mediaSame){
-            if(!wanted.equals(localVersion)) migrateLocalManifestVersion(local,remote,wanted,localVersion);
-            return false;
-        }
-        if(clinicalSame){
-            refreshMediaWithManifest(remote,cookie,nonce,listener);
-            return true;
-        }
-
-        hydrateWithManifest(remote,cookie,nonce,listener);
+    public synchronized boolean applyUpdate(UpdatePlan plan,String cookie,String nonce,ProgressListener listener)throws Exception{
+        if(plan==null)return false;
+        if(plan.fullHydrate){hydrateWithManifest(plan.remote,cookie,nonce,listener);return true;}
+        if(!plan.hasChanges()){markAuthVerified();return false;}
+        if(!plan.changedDatasets.isEmpty())refreshDatasetsWithManifest(plan.remote,plan.changedDatasets,cookie,nonce,listener);
+        if(plan.runtimeChanged)refreshRuntimeFiles(cookie,nonce);
+        if(plan.mediaChanged)refreshMediaWithManifest(plan.remote,cookie,nonce,listener);
+        JSONObject local=readJson(new File(active,"data-manifest.json"));
+        mergeRemoteManifestMetadata(local,plan.remote);
+        markAuthVerified();
         return true;
+    }
+
+    public synchronized boolean syncIfChanged(String cookie,String nonce,ProgressListener listener)throws Exception{
+        UpdatePlan plan=checkForUpdates(cookie,nonce);
+        return applyUpdate(plan,cookie,nonce,listener);
     }
 
     public synchronized void fullHydrate(String cookie, String nonce, ProgressListener listener) throws Exception {
@@ -166,43 +223,64 @@ public final class MedRefDataRuntime {
         writeJson(new File(active,"data-manifest.json"),migrated);
     }
 
-    private void refreshMediaWithManifest(JSONObject remote,String cookie,String nonce,ProgressListener listener)throws Exception{
-        File mediaStaging=new File(root,"media-staging");
-        deleteRecursively(mediaStaging);
-        if(!mediaStaging.mkdirs())throw new IOException("Không tạo được media staging.");
-        Progress progress=new Progress(remote,listener,true);
+    private void refreshDatasetsWithManifest(JSONObject remote,List<String> changed,String cookie,String nonce,ProgressListener listener)throws Exception{
+        if(changed==null||changed.isEmpty())return;
+        MedRefDatabase db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+        Progress progress=new Progress(remote,listener,changed);
         try{
-            hydrateMedia(remote,cookie,nonce,mediaStaging,progress);
-            File activeMedia=new File(active,"media");
-            File mediaPrevious=new File(root,"media-previous");
-            deleteRecursively(mediaPrevious);
-            if(activeMedia.exists())moveDirectory(activeMedia,mediaPrevious);
-            try{
-                moveDirectory(mediaStaging,activeMedia);
-            }catch(Exception e){
-                if(mediaPrevious.exists()&&!activeMedia.exists())moveDirectory(mediaPrevious,activeMedia);
-                throw e;
+            db.begin();
+            for(String key:changed){
+                db.clearDataset(key);
+                if("protocols".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertProtocol(row));
+                else if("icd".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertIcd(row));
+                else if("pl3".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertPl3(row));
+                else if("yhct".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertYhct(row));
+                else if("guides".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertGuide(row));
+                else if("synonyms".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertSynonym(row));
+                int expected=datasetCount(remote,key,-1),actual=db.datasetCount(key);
+                if(expected>=0&&expected!=actual)throw new IOException("Count mismatch "+key+": "+actual+"/"+expected);
             }
-            deleteRecursively(mediaPrevious);
-            JSONObject local=readJson(new File(active,"data-manifest.json"));
-            local.put("media_catalog_sha256",remote.optString("media_catalog_sha256",""));
-            local.put("media_catalog_version",remote.optInt("media_catalog_version",0));
-            local.put("media_complete",true);
-            local.put("media_refreshed_at",System.currentTimeMillis());
-            if(remote.has("data_version"))local.put("data_version",remote.optString("data_version",local.optString("data_version","")));
-            if(remote.has("sync_mode"))local.put("sync_mode",remote.optString("sync_mode",""));
-            if(remote.has("datasets")){
-                JSONObject localDatasets=local.optJSONObject("datasets");
-                if(localDatasets==null){localDatasets=new JSONObject();local.put("datasets",localDatasets);}
-                JSONObject remoteMedia=remote.optJSONObject("datasets")==null?null:remote.optJSONObject("datasets").optJSONObject("media");
-                if(remoteMedia!=null)localDatasets.put("media",new JSONObject(remoteMedia.toString()));
-            }
-            writeJson(new File(active,"data-manifest.json"),local);
-            progress.done();
-        }catch(Exception e){
-            deleteRecursively(mediaStaging);
-            throw e;
+            db.success();
+        }finally{db.end();db.close();}
+    }
+
+    private void refreshRuntimeFiles(String cookie,String nonce)throws Exception{
+        writeJson(new File(active,"dashboard.json"),fetchJson(new URL(MCR_BASE+"dashboard"),cookie,nonce));
+        writeJson(new File(active,"specialties-protocol.json"),fetchJson(new URL(MTP_BASE+"specialties?content_type=protocol"),cookie,nonce));
+        writeJson(new File(active,"specialties-procedure.json"),fetchJson(new URL(MTP_BASE+"specialties?content_type=procedure"),cookie,nonce));
+        writeJson(new File(active,"status.json"),fetchJson(new URL(MTP_BASE+"status"),cookie,nonce));
+        writeJson(new File(active,"icd-stats.json"),fetchJson(new URL(ICD_BASE+"stats"),cookie,nonce));
+    }
+
+    private void mergeRemoteManifestMetadata(JSONObject local,JSONObject remote)throws Exception{
+        for(String k:new String[]{"schema","snapshot_schema","data_version","legacy_data_version","web_version","media_catalog_version","media_catalog_sha256","media_content_drifted_count","minimum_app_version_code","max_offline_days","sync_mode","dataset_revision_schema","runtime_revision","future_delta_schema"}){
+            if(remote.has(k))local.put(k,remote.opt(k));
         }
+        if(remote.has("dataset_revisions"))local.put("dataset_revisions",new JSONObject(remote.getJSONObject("dataset_revisions").toString()));
+        if(remote.has("datasets"))local.put("datasets",new JSONObject(remote.getJSONObject("datasets").toString()));
+        MedRefDatabase db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+        try{local.put("counts_effective",db.counts());}finally{db.close();}
+        local.put("app_version",BuildConfig.VERSION_NAME);
+        local.put("app_version_code",BuildConfig.VERSION_CODE);
+        local.put("last_checked_at",System.currentTimeMillis());
+        writeJson(new File(active,"data-manifest.json"),local);
+    }
+
+    private void refreshMediaWithManifest(JSONObject remote,String cookie,String nonce,ProgressListener listener)throws Exception{
+        File activeMedia=new File(active,"media");
+        if(!activeMedia.exists()&&!activeMedia.mkdirs())throw new IOException("Không tạo được thư mục media.");
+        JSONObject ds=remote.getJSONObject("datasets").getJSONObject("media");
+        List<JSONObject> items=fetchMediaCatalog(ds,cookie,nonce);
+        List<JSONObject> changed=new ArrayList<>();
+        for(JSONObject item:items){
+            MediaDescriptor d=mediaDescriptor(item);
+            File target=new File(activeMedia,d.fileName);
+            if(!(target.isFile()&&d.sha.equals(sha256(target))))changed.add(item);
+        }
+        if(changed.isEmpty())return;
+        Progress progress=new Progress(remote,listener,changed.size());
+        hydrateMediaParallel(changed,cookie,nonce,activeMedia,progress);
+        progress.done();
     }
 
     private void hydrateWithManifest(JSONObject manifest,String cookie,String nonce,ProgressListener listener)throws Exception{
@@ -465,15 +543,18 @@ public final class MedRefDataRuntime {
 
     private static final class Progress{
         final ProgressListener listener;final int total;final int mediaTotal;int done=0;int mediaDone=0;
-        Progress(JSONObject m,ProgressListener l){this(m,l,false);}
-        Progress(JSONObject m,ProgressListener l,boolean mediaOnly){
+        Progress(JSONObject m,ProgressListener l){this(m,l,(List<String>)null);}
+        Progress(JSONObject m,ProgressListener l,boolean mediaOnly){this(m,l,mediaOnly?Math.max(0,datasetCount(m,"media",0)):-1);}
+        Progress(JSONObject m,ProgressListener l,int mediaWork){listener=l;mediaTotal=Math.max(0,mediaWork);total=Math.max(1,mediaTotal);emit(0,"Đang cập nhật hình/bảng nguồn…");}
+        Progress(JSONObject m,ProgressListener l,List<String> only){
             listener=l;int t=0;JSONObject d=m.optJSONObject("datasets");
+            if(only==null){if(d!=null)for(String k:new String[]{"protocols","icd","pl3","yhct","guides","synonyms","media"})t+=d.optJSONObject(k)==null?0:d.optJSONObject(k).optInt("count",0);}
+            else if(d!=null)for(String k:only)t+=d.optJSONObject(k)==null?0:d.optJSONObject(k).optInt("count",0);
             mediaTotal=d!=null&&d.optJSONObject("media")!=null?d.optJSONObject("media").optInt("count",0):0;
-            if(mediaOnly)t=mediaTotal;
-            else if(d!=null)for(String k:new String[]{"protocols","icd","pl3","yhct","guides","synonyms","media"})t+=d.optJSONObject(k)==null?0:d.optJSONObject(k).optInt("count",0);
-            total=Math.max(1,t);emit(0,mediaOnly?"Đang kiểm tra hình/bảng nguồn…":"Đang chuẩn bị dữ liệu offline…");
+            total=Math.max(1,t);emit(0,only==null?"Đang chuẩn bị dữ liệu offline…":"Đang cập nhật dữ liệu mới…");
         }
-        synchronized void advance(String key){done++;String label;if("media".equals(key)){mediaDone++;label="Đang tải hình/bảng nguồn "+mediaDone+"/"+Math.max(mediaTotal,mediaDone)+"…";}else label="Đang đồng bộ "+key+"…";emit(Math.min(99,(int)Math.floor(done*100.0/total)),label);}
-        synchronized void done(){emit(100,"Dữ liệu offline đã sẵn sàng.");}
+        synchronized void advance(String key){done++;String label;if("media".equals(key)){mediaDone++;label="Đang tải hình/bảng nguồn "+mediaDone+"/"+Math.max(mediaTotal,mediaDone)+"…";}else label="Đang cập nhật "+datasetLabel(key)+"…";emit(Math.min(99,(int)Math.floor(done*100.0/total)),label);}
+        synchronized void done(){emit(100,"Dữ liệu MedRef đã được cập nhật.");}
         void emit(int p,String m){if(listener!=null)listener.onProgress(p,m);}
+        static String datasetLabel(String k){if("protocols".equals(k))return"phác đồ / quy trình";if("icd".equals(k))return"ICD-10";if("pl3".equals(k))return"danh mục thuốc";if("yhct".equals(k))return"YHCT";if("guides".equals(k))return"hướng dẫn";if("synonyms".equals(k))return"từ đồng nghĩa";return k;}
     }}
