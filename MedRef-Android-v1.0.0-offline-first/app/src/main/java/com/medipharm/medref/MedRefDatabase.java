@@ -205,6 +205,65 @@ public final class MedRefDatabase {
 
     public JSONObject counts()throws Exception{return new JSONObject().put("protocols",count("SELECT COUNT(*) FROM protocols",new ArrayList<>())).put("icd",count("SELECT COUNT(*) FROM icd",new ArrayList<>())).put("pl3",count("SELECT COUNT(*) FROM pl3",new ArrayList<>())).put("yhct",count("SELECT COUNT(*) FROM yhct",new ArrayList<>())).put("guides",count("SELECT COUNT(*) FROM guides",new ArrayList<>())).put("synonyms",count("SELECT COUNT(*) FROM synonyms",new ArrayList<>()));}
 
+    public void clearDataset(String key){
+        switch(key){
+            case "protocols":
+                db.execSQL("DELETE FROM protocol_icd");
+                db.execSQL("DELETE FROM protocols");
+                break;
+            case "icd": db.execSQL("DELETE FROM icd"); break;
+            case "pl3": db.execSQL("DELETE FROM pl3"); break;
+            case "yhct": db.execSQL("DELETE FROM yhct"); break;
+            case "guides": db.execSQL("DELETE FROM guides"); break;
+            case "synonyms": db.execSQL("DELETE FROM synonyms"); break;
+            default: throw new IllegalArgumentException("Dataset không hỗ trợ: "+key);
+        }
+    }
+
+    public int datasetCount(String key){
+        switch(key){
+            case "protocols": return count("SELECT COUNT(*) FROM protocols",new ArrayList<>());
+            case "icd": return count("SELECT COUNT(*) FROM icd",new ArrayList<>());
+            case "pl3": return count("SELECT COUNT(*) FROM pl3",new ArrayList<>());
+            case "yhct": return count("SELECT COUNT(*) FROM yhct",new ArrayList<>());
+            case "guides": return count("SELECT COUNT(*) FROM guides",new ArrayList<>());
+            case "synonyms": return count("SELECT COUNT(*) FROM synonyms",new ArrayList<>());
+            default: return -1;
+        }
+    }
+
+    public String compatSignature(String key){
+        switch(key){
+            case "protocols": return sig("SELECT COUNT(*),COALESCE(MAX(id),0),COALESCE(MAX(updated_at),'') FROM protocols");
+            case "icd": return sig("SELECT COUNT(*),COALESCE(MAX(code),'') FROM icd");
+            case "pl3": return sig("SELECT COUNT(*),COALESCE(MAX(row_id),0) FROM pl3");
+            case "yhct": return sig("SELECT COUNT(*),COALESCE(MAX(row_id),0) FROM yhct");
+            case "guides": return sig("SELECT COUNT(*),COALESCE(MAX(row_id),0) FROM guides");
+            case "synonyms": return sig("SELECT COUNT(*),COALESCE(MAX(row_id),0) FROM synonyms");
+            default: return "";
+        }
+    }
+
+    private String sig(String sql){
+        Cursor c=db.rawQuery(sql,null);
+        try{
+            if(!c.moveToFirst())return "";
+            StringBuilder b=new StringBuilder();
+            for(int i=0;i<c.getColumnCount();i++){if(i>0)b.append('|');b.append(c.isNull(i)?"":c.getString(i));}
+            return sha256Text(b.toString());
+        }finally{c.close();}
+    }
+
+    private static String sha256Text(String value){
+        try{
+            java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");
+            byte[] dig=md.digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder out=new StringBuilder();
+            for(byte x:dig)out.append(String.format(java.util.Locale.ROOT,"%02x",x&0xff));
+            return out.toString();
+        }catch(Exception e){return "";}
+    }
+
     private int count(String sql,List<String>args){Cursor c=db.rawQuery(sql,args.toArray(new String[0]));try{return c.moveToFirst()?c.getInt(0):0;}finally{c.close();}}
     private static String param(Uri u,String k){String v=u.getQueryParameter(k);return v==null?"":v;}
     private static int intParam(Uri u,String k,int d){try{String v=u.getQueryParameter(k);return v==null?d:Integer.parseInt(v);}catch(Exception e){return d;}}
