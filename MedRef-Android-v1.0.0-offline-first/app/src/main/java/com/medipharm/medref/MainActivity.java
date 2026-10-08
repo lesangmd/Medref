@@ -211,7 +211,7 @@ public final class MainActivity extends Activity {
 
     private boolean handleNavigation(Uri uri){
         if(uri==null||uri.getScheme()==null)return false;String scheme=uri.getScheme().toLowerCase(Locale.ROOT);
-        if("medref".equals(scheme)){String action=uri.getHost();if("login".equals(action))showEmbeddedLogin();else if("logout".equals(action))logout();else if("data-update".equals(action))syncData(true);else if("rollback-data".equals(action))confirmRollback();else if("about".equals(action))showAbout();else if("check-update".equals(action))checkAppUpdate(true);return true;}
+        if("medref".equals(scheme)){String action=uri.getHost();if("login".equals(action))showEmbeddedLogin();else if("logout".equals(action))logout();else if("data-update".equals(action))checkDataUpdateInteractive();else if("rollback-data".equals(action))confirmRollback();else if("about".equals(action))showAbout();else if("check-update".equals(action))checkAppUpdate(true);return true;}
         if(isLocal(uri))return false;
         if("https".equals(scheme)){if(isSachYHoc(uri)&&isLoginPath(uri.getPath())){showEmbeddedLogin();return true;}openExternal(uri);return true;}
         openExternal(uri);return true;
@@ -243,16 +243,114 @@ public final class MainActivity extends Activity {
         },"MedRef-reauth").start();
     }
 
-    private void syncData(boolean visible){
-        if(syncRunning)return;if(!networkAvailable()){if(visible)Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
-        syncRunning=true;if(visible)showSyncProgress(1,"Đang xác thực tài khoản…");
+    private void checkDataUpdateInteractive(){
+        if(syncRunning)return;
+        if(!networkAvailable()){Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
+        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
+        syncRunning=true;
+        showGate("Đang kiểm tra dữ liệu mới","MedRef đang đối chiếu phiên bản dữ liệu trên thiết bị với máy chủ.",null,null,null,null);
         new Thread(()->{
             try{
                 String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
+                MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
+                main.post(()->{
+                    syncRunning=false;
+                    loadLocalApp();
+                    if(!plan.hasChanges()){
+                        new AlertDialog.Builder(this)
+                                .setTitle("Dữ liệu đã cập nhật")
+                                .setMessage("Thiết bị đang có dữ liệu MedRef mới nhất. Không cần tải lại.")
+                                .setPositiveButton("Đóng",null)
+                                .show();
+                        return;
+                    }
+                    StringBuilder msg=new StringBuilder("Phát hiện dữ liệu mới:\n\n").append(plan.summary());
+                    int protocols=plan.remoteCount("protocols");
+                    if(protocols>=0)msg.append("\n\nPhác đồ / Quy trình trên máy chủ: ").append(protocols);
+                    msg.append("\n\nMedRef chỉ tải những nhóm dữ liệu đã thay đổi.");
+                    new AlertDialog.Builder(this)
+                            .setTitle("Có dữ liệu MedRef mới")
+                            .setMessage(msg.toString())
+                            .setNegativeButton("Để sau",null)
+                            .setPositiveButton("Cập nhật ngay",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
+                            .show();
+                });
+            }catch(Exception e){
+                Log.e(TAG,"update preflight",e);
+                main.post(()->{
+                    syncRunning=false;
+                    loadLocalApp();
+                    new AlertDialog.Builder(this)
+                            .setTitle("Chưa thể kiểm tra dữ liệu mới")
+                            .setMessage(safe(e))
+                            .setPositiveButton("Đóng",null)
+                            .show();
+                });
+            }
+        },"MedRef-update-preflight").start();
+    }
+
+    private void applyDataUpdate(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce,boolean visible){
+        if(syncRunning)return;
+        syncRunning=true;
+        if(visible)showSyncProgress(1,"Đang chuẩn bị cập nhật…");
+        new Thread(()->{
+            try{
                 MedRefDataRuntime.ProgressListener l=(pct,msg)->{if(visible)main.post(()->showSyncProgress(pct,msg));};
-                if(dataRuntime.hasActiveData())dataRuntime.syncIfChanged(cookie,nonce,l);else dataRuntime.fullHydrate(cookie,nonce,l);
-                main.post(()->{syncRunning=false;loadLocalApp();if(visible)Toast.makeText(this,"Dữ liệu MedRef đã sẵn sàng.",Toast.LENGTH_SHORT).show();});
-            }catch(Exception e){Log.e(TAG,"sync",e);main.post(()->{syncRunning=false;if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){loadLocalApp();Toast.makeText(this,"Đồng bộ chưa hoàn tất; đang dùng dữ liệu cục bộ gần nhất.",Toast.LENGTH_LONG).show();}else showGate("Chưa thể đồng bộ dữ liệu",safe(e),"Thử lại",v->syncData(true),"Đăng nhập lại",v->showEmbeddedLogin());});}
+                boolean changed=dataRuntime.applyUpdate(plan,cookie,nonce,l);
+                main.post(()->{
+                    syncRunning=false;
+                    loadLocalApp();
+                    if(visible)Toast.makeText(this,changed?"Đã cập nhật dữ liệu MedRef.":"Dữ liệu đã ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
+                });
+            }catch(Exception e){
+                Log.e(TAG,"selective update",e);
+                main.post(()->{
+                    syncRunning=false;
+                    if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
+                        loadLocalApp();
+                        Toast.makeText(this,"Cập nhật chưa hoàn tất; dữ liệu cục bộ hiện tại vẫn được giữ nguyên.",Toast.LENGTH_LONG).show();
+                    }else showGate("Chưa thể cập nhật dữ liệu",safe(e),"Thử lại",v->checkDataUpdateInteractive(),"Đăng nhập lại",v->showEmbeddedLogin());
+                });
+            }
+        },"MedRef-selective-update").start();
+    }
+
+    private void syncData(boolean visible){
+        if(syncRunning)return;
+        if(!networkAvailable()){if(visible)Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
+        if(!isMemberAuthenticated()){if(visible)showEmbeddedLogin();return;}
+        syncRunning=true;
+        if(visible)showSyncProgress(1,"Đang kiểm tra dữ liệu mới…");
+        new Thread(()->{
+            try{
+                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
+                MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
+                if(!plan.hasChanges()){
+                    main.post(()->{
+                        syncRunning=false;
+                        loadLocalApp();
+                        if(visible)Toast.makeText(this,"Dữ liệu MedRef đang ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+                MedRefDataRuntime.ProgressListener l=(pct,msg)->{if(visible)main.post(()->showSyncProgress(pct,msg));};
+                dataRuntime.applyUpdate(plan,cookie,nonce,l);
+                main.post(()->{
+                    syncRunning=false;
+                    loadLocalApp();
+                    if(visible)Toast.makeText(this,"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_SHORT).show();
+                });
+            }catch(Exception e){
+                Log.e(TAG,"sync",e);
+                main.post(()->{
+                    syncRunning=false;
+                    if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
+                        loadLocalApp();
+                        if(visible)Toast.makeText(this,"Đồng bộ chưa hoàn tất; đang dùng dữ liệu cục bộ gần nhất.",Toast.LENGTH_LONG).show();
+                    }else if(visible)showGate("Chưa thể đồng bộ dữ liệu",safe(e),"Thử lại",v->checkDataUpdateInteractive(),"Đăng nhập lại",v->showEmbeddedLogin());
+                });
+            }
         },"MedRef-sync").start();
     }
 
