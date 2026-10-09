@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -49,6 +50,11 @@ public final class MedRefDataRuntime {
         }
         public boolean hasChanges(){return fullHydrate||runtimeChanged||mediaChanged||!changedDatasets.isEmpty();}
         public int remoteCount(String key){JSONObject d=remote.optJSONObject("datasets");JSONObject x=d==null?null:d.optJSONObject(key);return x==null?-1:x.optInt("count",-1);}
+        public boolean usesProtocolDelta(){
+            JSONObject d=remote.optJSONObject("datasets");
+            JSONObject p=d==null?null:d.optJSONObject("protocols");
+            return p!=null&&"index-v1".equals(p.optString("delta_mode",""))&&!p.optString("index_url","").isEmpty()&&!p.optString("batch_url","").isEmpty();
+        }
         public String summary(){
             ArrayList<String> labels=new ArrayList<>();
             for(String k:changedDatasets){
@@ -225,11 +231,21 @@ public final class MedRefDataRuntime {
 
     private void refreshDatasetsWithManifest(JSONObject remote,List<String> changed,String cookie,String nonce,ProgressListener listener)throws Exception{
         if(changed==null||changed.isEmpty())return;
+        ArrayList<String> snapshot=new ArrayList<>(changed);
+        if(snapshot.contains("protocols")){
+            JSONObject datasets=remote.optJSONObject("datasets");
+            JSONObject p=datasets==null?null:datasets.optJSONObject("protocols");
+            if(p!=null&&"index-v1".equals(p.optString("delta_mode",""))&&!p.optString("index_url","").isEmpty()&&!p.optString("batch_url","").isEmpty()){
+                refreshProtocolsDelta(remote,p,cookie,nonce,listener);
+                snapshot.remove("protocols");
+            }
+        }
+        if(snapshot.isEmpty())return;
         MedRefDatabase db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
-        Progress progress=new Progress(remote,listener,changed);
+        Progress progress=new Progress(remote,listener,snapshot);
         try{
             db.begin();
-            for(String key:changed){
+            for(String key:snapshot){
                 db.clearDataset(key);
                 if("protocols".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertProtocol(row));
                 else if("icd".equals(key))hydrateDataset(remote,key,cookie,nonce,progress,(row)->db.insertIcd(row));
@@ -242,6 +258,90 @@ public final class MedRefDataRuntime {
             }
             db.success();
         }finally{db.end();db.close();}
+    }
+
+    private void refreshProtocolsDelta(JSONObject remote,JSONObject descriptor,String cookie,String nonce,ProgressListener listener)throws Exception{
+        Map<String,String> remoteIndex=fetchProtocolIndex(descriptor,cookie,nonce);
+        MedRefDatabase db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+        Map<String,String> localIndex;
+        try{localIndex=db.protocolRevisionMap();}finally{db.close();}
+
+        ArrayList<String> changedSlugs=new ArrayList<>();
+        ArrayList<String> removedSlugs=new ArrayList<>();
+        for(Map.Entry<String,String> e:remoteIndex.entrySet()){
+            String localUpdated=localIndex.get(e.getKey());
+            if(localUpdated==null||!e.getValue().equals(localUpdated))changedSlugs.add(e.getKey());
+        }
+        for(String slug:localIndex.keySet())if(!remoteIndex.containsKey(slug))removedSlugs.add(slug);
+
+        int totalOps=changedSlugs.size()+removedSlugs.size();
+        if(totalOps==0)return;
+        if(listener!=null)listener.onProgress(1,"Đang chuẩn bị cập nhật "+totalOps+" phác đồ/quy trình thay đổi…");
+
+        int batchSize=Math.max(1,Math.min(30,descriptor.optInt("batch_size",20)));
+        ArrayList<JSONObject> details=new ArrayList<>();
+        for(int offset=0;offset<changedSlugs.size();offset+=batchSize){
+            int end=Math.min(changedSlugs.size(),offset+batchSize);
+            List<String> chunk=changedSlugs.subList(offset,end);
+            JSONArray rows=fetchProtocolBatch(descriptor,chunk,cookie,nonce);
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=rows.optJSONObject(i);
+                if(row!=null&&!row.optString("slug","").isEmpty())details.add(row);
+            }
+            int pct=Math.min(70,(int)Math.floor(end*70.0/Math.max(1,changedSlugs.size())));
+            if(listener!=null)listener.onProgress(Math.max(2,pct),"Đã nhận "+end+"/"+changedSlugs.size()+" phác đồ/quy trình thay đổi…");
+        }
+        if(details.size()!=changedSlugs.size())throw new IOException("Protocol delta thiếu dữ liệu: "+details.size()+"/"+changedSlugs.size());
+
+        db=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+        try{
+            db.begin();
+            int done=0;
+            for(String slug:removedSlugs){
+                db.deleteProtocol(slug);done++;
+                if(listener!=null)listener.onProgress(70+(int)Math.floor(done*29.0/Math.max(1,totalOps)),"Đang loại bỏ nội dung không còn hiệu lực…");
+            }
+            for(JSONObject row:details){
+                db.insertProtocol(row);done++;
+                if(listener!=null)listener.onProgress(70+(int)Math.floor(done*29.0/Math.max(1,totalOps)),"Đang ghi phác đồ/quy trình mới vào thiết bị…");
+            }
+            int expected=datasetCount(remote,"protocols",-1),actual=db.datasetCount("protocols");
+            if(expected>=0&&expected!=actual)throw new IOException("Count mismatch protocols delta: "+actual+"/"+expected);
+            db.success();
+        }finally{db.end();db.close();}
+        if(listener!=null)listener.onProgress(99,"Đã cập nhật "+details.size()+" mục và loại bỏ "+removedSlugs.size()+" mục.");
+    }
+
+    private Map<String,String> fetchProtocolIndex(JSONObject descriptor,String cookie,String nonce)throws Exception{
+        String url=descriptor.optString("index_url","");
+        if(!url.startsWith("https://"))throw new IOException("Protocol delta index URL không hợp lệ.");
+        int limit=500,offset=0;
+        HashMap<String,String> out=new HashMap<>();
+        do{
+            JSONObject page=fetchJson(new URL(url+(url.contains("?")?"&":"?")+"limit="+limit+"&offset="+offset),cookie,nonce);
+            JSONArray rows=page.optJSONArray("results");if(rows==null)rows=new JSONArray();
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=rows.optJSONObject(i);if(row==null)continue;
+                String slug=row.optString("slug",""),updated=row.optString("updated_at","");
+                if(!slug.isEmpty())out.put(slug,updated);
+            }
+            offset=page.optInt("next_offset",offset+rows.length());
+            if(!page.optBoolean("has_more",false))break;
+            if(rows.length()==0)throw new IOException("Protocol delta index trả về trang rỗng trước khi hoàn tất.");
+        }while(true);
+        int expected=descriptor.optInt("count",-1);
+        if(expected>=0&&out.size()!=expected)throw new IOException("Protocol index count mismatch: "+out.size()+"/"+expected);
+        return out;
+    }
+
+    private JSONArray fetchProtocolBatch(JSONObject descriptor,List<String> slugs,String cookie,String nonce)throws Exception{
+        String base=descriptor.optString("batch_url","");
+        if(!base.startsWith("https://"))throw new IOException("Protocol delta batch URL không hợp lệ.");
+        StringBuilder joined=new StringBuilder();
+        for(String slug:slugs){if(joined.length()>0)joined.append(',');joined.append(slug);}
+        String url=base+(base.contains("?")?"&":"?")+"slugs="+URLEncoder.encode(joined.toString(),StandardCharsets.UTF_8.name());
+        JSONObject payload=fetchJson(new URL(url),cookie,nonce);
+        JSONArray rows=payload.optJSONArray("results");return rows==null?new JSONArray():rows;
     }
 
     private void refreshRuntimeFiles(String cookie,String nonce)throws Exception{
