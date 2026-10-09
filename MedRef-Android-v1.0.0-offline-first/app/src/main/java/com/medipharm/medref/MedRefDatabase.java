@@ -10,8 +10,10 @@ import org.json.JSONObject;
 import java.io.File;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class MedRefDatabase {
     private final SQLiteDatabase db;
@@ -74,6 +76,20 @@ public final class MedRefDatabase {
             JSONObject r=icd.optJSONObject(i); if(r==null) continue; String code=s(r,"code"); if(code.isEmpty()) continue;
             db.execSQL("INSERT INTO protocol_icd(slug,code,relation_type,is_primary) VALUES(?,?,?,?)",new Object[]{slug,code,s(r,"relation_type"),b(r,"is_primary")});
         }
+    }
+
+    public Map<String,String> protocolRevisionMap(){
+        HashMap<String,String> out=new HashMap<>();
+        Cursor c=db.rawQuery("SELECT slug,updated_at FROM protocols",null);
+        try{while(c.moveToNext())out.put(c.getString(0),c.isNull(1)?"":c.getString(1));}
+        finally{c.close();}
+        return out;
+    }
+
+    public void deleteProtocol(String slug){
+        if(slug==null||slug.isEmpty())return;
+        db.execSQL("DELETE FROM protocol_icd WHERE slug=?",new Object[]{slug});
+        db.execSQL("DELETE FROM protocols WHERE slug=?",new Object[]{slug});
     }
 
     public void insertIcd(JSONObject r) {
