@@ -76,6 +76,9 @@ public final class MainActivity extends Activity {
     private MedRefDataRuntime dataRuntime;
     private LocalContentServer localServer;
     private volatile boolean syncRunning=false;
+    private volatile boolean backgroundUpdateCheckRunning=false;
+    private volatile MedRefDataRuntime.UpdatePlan cachedUpdatePlan=null;
+    private volatile long cachedUpdatePlanAt=0L;
     private Dialog loginDialog;
     private WebView loginView;
     private CredentialStore credentialStore;
@@ -102,7 +105,7 @@ public final class MainActivity extends Activity {
         AppUpdateJobService.schedule(this);
         if(dataRuntime.hasValidOfflineSession()){
             loadLocalApp();
-            if(networkAvailable()&&isMemberAuthenticated())main.postDelayed(()->syncData(false),2200L);
+            if(networkAvailable()&&isMemberAuthenticated())main.postDelayed(this::scheduleBackgroundDataPreflight,2200L);
             return;
         }
         if(networkAvailable()&&isMemberAuthenticated()){
@@ -231,7 +234,7 @@ public final class MainActivity extends Activity {
                     syncRunning=false;
                     loadLocalApp();
                     Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();
-                    if(networkAvailable())main.postDelayed(()->syncData(false),2200L);
+                    if(networkAvailable())main.postDelayed(this::scheduleBackgroundDataPreflight,2200L);
                 });
             }catch(Exception e){
                 Log.e(TAG,"reauth",e);
@@ -243,37 +246,49 @@ public final class MainActivity extends Activity {
         },"MedRef-reauth").start();
     }
 
-    private void checkDataUpdateInteractive(){
-        if(syncRunning)return;
-        if(!networkAvailable()){Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
-        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
-        syncRunning=true;
-        showGate("Đang kiểm tra dữ liệu mới","MedRef đang đối chiếu phiên bản dữ liệu trên thiết bị với máy chủ.",null,null,null,null);
+    private void scheduleBackgroundDataPreflight(){
+        if(backgroundUpdateCheckRunning||syncRunning||dataRuntime==null||!dataRuntime.hasActiveData())return;
+        if(!networkAvailable()||!isMemberAuthenticated())return;
+        backgroundUpdateCheckRunning=true;
         new Thread(()->{
             try{
                 String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
                 MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
+                cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
+            }catch(Exception e){
+                Log.w(TAG,"background update preflight",e);
+            }finally{
+                backgroundUpdateCheckRunning=false;
+            }
+        },"MedRef-background-preflight").start();
+    }
+
+    private void checkDataUpdateInteractive(){
+        if(syncRunning){
+            new AlertDialog.Builder(this)
+                    .setTitle("Đang cập nhật dữ liệu")
+                    .setMessage("MedRef đang thực hiện một lượt cập nhật. Vui lòng chờ tác vụ hiện tại hoàn tất.")
+                    .setPositiveButton("Đóng",null)
+                    .show();
+            return;
+        }
+        if(!networkAvailable()){Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
+        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
+        syncRunning=true;
+        showGate("Đang kiểm tra dữ liệu mới","MedRef đang kiểm tra phiên bản dữ liệu. Dữ liệu hiện có trên thiết bị được giữ nguyên.",null,null,null,null);
+        new Thread(()->{
+            try{
+                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
+                MedRefDataRuntime.UpdatePlan plan=null;
+                long age=System.currentTimeMillis()-cachedUpdatePlanAt;
+                if(cachedUpdatePlan!=null&&age>=0&&age<=30000L)plan=cachedUpdatePlan;
+                if(plan==null)plan=dataRuntime.checkForUpdates(cookie,nonce);
+                cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
+                final MedRefDataRuntime.UpdatePlan readyPlan=plan;
                 main.post(()->{
                     syncRunning=false;
                     loadLocalApp();
-                    if(!plan.hasChanges()){
-                        new AlertDialog.Builder(this)
-                                .setTitle("Dữ liệu đã cập nhật")
-                                .setMessage("Thiết bị đang có dữ liệu MedRef mới nhất. Không cần tải lại.")
-                                .setPositiveButton("Đóng",null)
-                                .show();
-                        return;
-                    }
-                    StringBuilder msg=new StringBuilder("Phát hiện dữ liệu mới:\n\n").append(plan.summary());
-                    int protocols=plan.remoteCount("protocols");
-                    if(protocols>=0)msg.append("\n\nPhác đồ / Quy trình trên máy chủ: ").append(protocols);
-                    msg.append("\n\nMedRef chỉ tải những nhóm dữ liệu đã thay đổi.");
-                    new AlertDialog.Builder(this)
-                            .setTitle("Có dữ liệu MedRef mới")
-                            .setMessage(msg.toString())
-                            .setNegativeButton("Để sau",null)
-                            .setPositiveButton("Cập nhật ngay",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
-                            .show();
+                    presentUpdatePlan(readyPlan,cookie,nonce);
                 });
             }catch(Exception e){
                 Log.e(TAG,"update preflight",e);
@@ -290,8 +305,33 @@ public final class MainActivity extends Activity {
         },"MedRef-update-preflight").start();
     }
 
+    private void presentUpdatePlan(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce){
+        if(plan==null||!plan.hasChanges()){
+            new AlertDialog.Builder(this)
+                    .setTitle("Dữ liệu đã cập nhật")
+                    .setMessage("Thiết bị đang có dữ liệu MedRef mới nhất. Không cần tải lại.")
+                    .setPositiveButton("Đóng",null)
+                    .show();
+            return;
+        }
+        StringBuilder msg=new StringBuilder("Phát hiện dữ liệu mới:\n\n").append(plan.summary());
+        int protocols=plan.remoteCount("protocols");
+        if(protocols>=0)msg.append("\n\nPhác đồ / Quy trình trên máy chủ: ").append(protocols);
+        if(plan.usesProtocolDelta())msg.append("\n\nPhác đồ/Quy trình sẽ được cập nhật theo từng bản ghi thay đổi, không tải lại toàn bộ thư viện.");
+        else msg.append("\n\nMedRef chỉ tải những nhóm dữ liệu đã thay đổi.");
+        new AlertDialog.Builder(this)
+                .setTitle("Có dữ liệu MedRef mới")
+                .setMessage(msg.toString())
+                .setNegativeButton("Để sau",null)
+                .setPositiveButton("Cập nhật ngay",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
+                .show();
+    }
+
     private void applyDataUpdate(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce,boolean visible){
-        if(syncRunning)return;
+        if(syncRunning){
+            if(visible)Toast.makeText(this,"MedRef đang cập nhật dữ liệu.",Toast.LENGTH_SHORT).show();
+            return;
+        }
         syncRunning=true;
         if(visible)showSyncProgress(1,"Đang chuẩn bị cập nhật…");
         new Thread(()->{
@@ -300,6 +340,7 @@ public final class MainActivity extends Activity {
                 boolean changed=dataRuntime.applyUpdate(plan,cookie,nonce,l);
                 main.post(()->{
                     syncRunning=false;
+                    cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
                     loadLocalApp();
                     if(visible)Toast.makeText(this,changed?"Đã cập nhật dữ liệu MedRef.":"Dữ liệu đã ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
                 });
@@ -307,6 +348,7 @@ public final class MainActivity extends Activity {
                 Log.e(TAG,"selective update",e);
                 main.post(()->{
                     syncRunning=false;
+                    cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
                     if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
                         loadLocalApp();
                         Toast.makeText(this,"Cập nhật chưa hoàn tất; dữ liệu cục bộ hiện tại vẫn được giữ nguyên.",Toast.LENGTH_LONG).show();
@@ -317,7 +359,7 @@ public final class MainActivity extends Activity {
     }
 
     private void syncData(boolean visible){
-        if(syncRunning)return;
+        if(syncRunning){if(visible)Toast.makeText(this,"MedRef đang xử lý dữ liệu.",Toast.LENGTH_SHORT).show();return;}
         if(!networkAvailable()){if(visible)Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
         if(!isMemberAuthenticated()){if(visible)showEmbeddedLogin();return;}
         syncRunning=true;
