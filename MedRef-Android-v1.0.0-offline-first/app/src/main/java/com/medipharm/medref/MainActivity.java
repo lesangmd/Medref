@@ -30,6 +30,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -198,6 +199,7 @@ public final class MainActivity extends Activity {
         webView=new WebView(this);webView.setBackgroundColor(Color.WHITE);webContainer.addView(webView,new FrameLayout.LayoutParams(-1,-1));
         WebSettings s=webView.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setTextZoom(100);s.setDefaultTextEncodingName("UTF-8");s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setUserAgentString(s.getUserAgentString()+APP_UA);
         CookieManager cm=CookieManager.getInstance();cm.setAcceptCookie(true);try{cm.setAcceptThirdPartyCookies(webView,true);}catch(Throwable ignored){}
+        webView.addJavascriptInterface(new NativeBridge(),"MedRefNative");
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient(){
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){if(localServer!=null){WebResourceResponse r=localServer.intercept(request.getUrl());if(r!=null)return r;}return super.shouldInterceptRequest(view,request);}
@@ -247,7 +249,7 @@ public final class MainActivity extends Activity {
     }
 
     private void scheduleBackgroundDataPreflight(){
-        if(backgroundUpdateCheckRunning||syncRunning||dataRuntime==null||!dataRuntime.hasActiveData())return;
+        if(backgroundUpdateCheckRunning||syncRunning||DataUpdateService.isRunning(this)||dataRuntime==null||!dataRuntime.hasActiveData())return;
         if(!networkAvailable()||!isMemberAuthenticated())return;
         backgroundUpdateCheckRunning=true;
         new Thread(()->{
@@ -264,10 +266,14 @@ public final class MainActivity extends Activity {
     }
 
     private void checkDataUpdateInteractive(){
+        if(DataUpdateService.isRunning(this)){
+            showBackgroundUpdateStatus();
+            return;
+        }
         if(syncRunning){
             new AlertDialog.Builder(this)
-                    .setTitle("Đang cập nhật dữ liệu")
-                    .setMessage("MedRef đang thực hiện một lượt cập nhật. Vui lòng chờ tác vụ hiện tại hoàn tất.")
+                    .setTitle("Đang kiểm tra dữ liệu")
+                    .setMessage("MedRef đang kiểm tra phiên bản dữ liệu mới. Bạn vẫn có thể tiếp tục sử dụng ứng dụng.")
                     .setPositiveButton("Đóng",null)
                     .show();
             return;
@@ -275,7 +281,7 @@ public final class MainActivity extends Activity {
         if(!networkAvailable()){Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
         if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
         syncRunning=true;
-        showGate("Đang kiểm tra dữ liệu mới","MedRef đang kiểm tra phiên bản dữ liệu. Dữ liệu hiện có trên thiết bị được giữ nguyên.",null,null,null,null);
+        Toast.makeText(this,"Đang kiểm tra dữ liệu mới…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             try{
                 String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
@@ -287,18 +293,17 @@ public final class MainActivity extends Activity {
                 final MedRefDataRuntime.UpdatePlan readyPlan=plan;
                 main.post(()->{
                     syncRunning=false;
-                    loadLocalApp();
                     presentUpdatePlan(readyPlan,cookie,nonce);
                 });
             }catch(Exception e){
                 Log.e(TAG,"update preflight",e);
                 main.post(()->{
                     syncRunning=false;
-                    loadLocalApp();
                     new AlertDialog.Builder(this)
                             .setTitle("Chưa thể kiểm tra dữ liệu mới")
                             .setMessage(safe(e))
-                            .setPositiveButton("Đóng",null)
+                            .setNegativeButton("Đóng",null)
+                            .setPositiveButton("Thử lại",(d,w)->checkDataUpdateInteractive())
                             .show();
                 });
             }
@@ -319,43 +324,68 @@ public final class MainActivity extends Activity {
         if(protocols>=0)msg.append("\n\nPhác đồ / Quy trình trên máy chủ: ").append(protocols);
         if(plan.usesProtocolDelta())msg.append("\n\nPhác đồ/Quy trình sẽ được cập nhật theo từng bản ghi thay đổi, không tải lại toàn bộ thư viện.");
         else msg.append("\n\nMedRef chỉ tải những nhóm dữ liệu đã thay đổi.");
+        msg.append("\n\nQuá trình cập nhật chạy dưới nền. Bạn có thể tiếp tục tra cứu ứng dụng trong khi tải.");
         new AlertDialog.Builder(this)
                 .setTitle("Có dữ liệu MedRef mới")
                 .setMessage(msg.toString())
                 .setNegativeButton("Để sau",null)
-                .setPositiveButton("Cập nhật ngay",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
+                .setPositiveButton("Cập nhật nền",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
                 .show();
     }
 
     private void applyDataUpdate(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce,boolean visible){
-        if(syncRunning){
-            if(visible)Toast.makeText(this,"MedRef đang cập nhật dữ liệu.",Toast.LENGTH_SHORT).show();
+        if(DataUpdateService.isRunning(this)){
+            if(visible)showBackgroundUpdateStatus();
             return;
         }
-        syncRunning=true;
-        if(visible)showSyncProgress(1,"Đang chuẩn bị cập nhật…");
-        new Thread(()->{
-            try{
-                MedRefDataRuntime.ProgressListener l=(pct,msg)->{if(visible)main.post(()->showSyncProgress(pct,msg));};
-                boolean changed=dataRuntime.applyUpdate(plan,cookie,nonce,l);
-                main.post(()->{
-                    syncRunning=false;
-                    cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
-                    loadLocalApp();
-                    if(visible)Toast.makeText(this,changed?"Đã cập nhật dữ liệu MedRef.":"Dữ liệu đã ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
-                });
-            }catch(Exception e){
-                Log.e(TAG,"selective update",e);
-                main.post(()->{
-                    syncRunning=false;
-                    cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
-                    if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
-                        loadLocalApp();
-                        Toast.makeText(this,"Cập nhật chưa hoàn tất; dữ liệu cục bộ hiện tại vẫn được giữ nguyên.",Toast.LENGTH_LONG).show();
-                    }else showGate("Chưa thể cập nhật dữ liệu",safe(e),"Thử lại",v->checkDataUpdateInteractive(),"Đăng nhập lại",v->showEmbeddedLogin());
-                });
+        try{
+            cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
+            DataUpdateService.start(this,cookie,nonce);
+            if(visible){
+                new AlertDialog.Builder(this)
+                        .setTitle("Đã bắt đầu cập nhật nền")
+                        .setMessage("MedRef sẽ tiếp tục tải và kiểm tra dữ liệu ở chế độ nền. Bạn có thể tiếp tục tra cứu phác đồ, quy trình và ICD-10 bằng dữ liệu hiện có.")
+                        .setNegativeButton("Xem tiến độ",(d,w)->main.postDelayed(this::showBackgroundUpdateStatus,450L))
+                        .setPositiveButton("Tiếp tục sử dụng",null)
+                        .show();
             }
-        },"MedRef-selective-update").start();
+        }catch(Exception e){
+            Log.e(TAG,"start background update",e);
+            if(visible)new AlertDialog.Builder(this)
+                    .setTitle("Chưa thể bắt đầu cập nhật")
+                    .setMessage(safe(e))
+                    .setPositiveButton("Đóng",null)
+                    .show();
+        }
+    }
+
+    private void showBackgroundUpdateStatus(){
+        String state=DataUpdateService.state(this);
+        int pct=DataUpdateService.progress(this);
+        String msg=DataUpdateService.message(this);
+        if(DataUpdateService.STATE_RUNNING.equals(state)){
+            new AlertDialog.Builder(this)
+                    .setTitle("Đang cập nhật dữ liệu trong nền")
+                    .setMessage((msg==null||msg.isEmpty()?"MedRef đang cập nhật dữ liệu.":msg)+"\n\nTiến độ: "+pct+"%\n\nBạn có thể tiếp tục sử dụng ứng dụng.")
+                    .setNegativeButton("Kiểm tra lại",(d,w)->main.postDelayed(this::showBackgroundUpdateStatus,700L))
+                    .setPositiveButton("Tiếp tục sử dụng",null)
+                    .show();
+        }else if(DataUpdateService.STATE_DONE.equals(state)){
+            new AlertDialog.Builder(this)
+                    .setTitle("Cập nhật dữ liệu hoàn tất")
+                    .setMessage(msg==null||msg.isEmpty()?"Dữ liệu mới đã sẵn sàng.":msg)
+                    .setPositiveButton("Đóng",null)
+                    .show();
+        }else if(DataUpdateService.STATE_FAILED.equals(state)){
+            new AlertDialog.Builder(this)
+                    .setTitle("Cập nhật chưa hoàn tất")
+                    .setMessage((msg==null||msg.isEmpty()?"Dữ liệu hiện có vẫn được giữ nguyên.":msg)+"\n\nLần cập nhật tiếp theo sẽ tái sử dụng các phần đã tải và tiếp tục phần còn thiếu.")
+                    .setNegativeButton("Đóng",null)
+                    .setPositiveButton("Thử lại",(d,w)->checkDataUpdateInteractive())
+                    .show();
+        }else{
+            checkDataUpdateInteractive();
+        }
     }
 
     private void syncData(boolean visible){
@@ -610,6 +640,15 @@ public final class MainActivity extends Activity {
     private void openExternal(Uri u){try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception ignored){}}
     private String safe(Throwable e){String m=e==null?"":e.getMessage();return(m==null||m.trim().isEmpty())?"Lỗi không xác định.":m;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
+
+    private final class NativeBridge {
+        @JavascriptInterface public void updateData(){main.post(MainActivity.this::checkDataUpdateInteractive);}
+        @JavascriptInterface public void checkAppUpdate(){main.post(()->MainActivity.this.checkAppUpdate(true));}
+        @JavascriptInterface public void rollbackData(){main.post(MainActivity.this::confirmRollback);}
+        @JavascriptInterface public void about(){main.post(MainActivity.this::showAbout);}
+        @JavascriptInterface public void logout(){main.post(MainActivity.this::logout);}
+        @JavascriptInterface public void login(){main.post(MainActivity.this::showEmbeddedLogin);}
+    }
 
     @Override public void onConfigurationChanged(Configuration newConfig){
         super.onConfigurationChanged(newConfig);
