@@ -91,6 +91,7 @@ public final class MedRefDataRuntime {
     private final File staging;
     private final File previous;
     private final File mediaCache;
+    private final File deltaCache;
     private final SharedPreferences prefs;
 
     public MedRefDataRuntime(Context context) {
@@ -100,12 +101,14 @@ public final class MedRefDataRuntime {
         this.staging = new File(root, "staging");
         this.previous = new File(root, "previous-good");
         this.mediaCache = new File(root, "verified-media-cache");
+        this.deltaCache = new File(root, "delta-cache");
         this.prefs = this.context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     public synchronized void ensureReady() throws Exception {
         if (!root.exists() && !root.mkdirs()) throw new IOException("Không thể tạo thư mục dữ liệu MedRef.");
         if (!mediaCache.exists() && !mediaCache.mkdirs()) throw new IOException("Không thể tạo bộ nhớ đệm media MedRef.");
+        if (!deltaCache.exists() && !deltaCache.mkdirs()) throw new IOException("Không thể tạo bộ nhớ đệm cập nhật MedRef.");
         if (active.exists() && !isValidDataset(active)) {
             if (previous.exists() && isValidDataset(previous)) {
                 deleteRecursively(active);
@@ -310,6 +313,7 @@ public final class MedRefDataRuntime {
             db.success();
         }finally{db.end();db.close();}
         if(listener!=null)listener.onProgress(99,"Đã cập nhật "+details.size()+" mục và loại bỏ "+removedSlugs.size()+" mục.");
+        try{deleteRecursively(protocolDeltaCacheDir(descriptor));}catch(Exception ignored){}
     }
 
     private Map<String,String> fetchProtocolIndex(JSONObject descriptor,String cookie,String nonce)throws Exception{
@@ -339,9 +343,40 @@ public final class MedRefDataRuntime {
         if(!base.startsWith("https://"))throw new IOException("Protocol delta batch URL không hợp lệ.");
         StringBuilder joined=new StringBuilder();
         for(String slug:slugs){if(joined.length()>0)joined.append(',');joined.append(slug);}
+
+        File cacheDir=protocolDeltaCacheDir(descriptor);
+        if(!cacheDir.exists()&&!cacheDir.mkdirs())throw new IOException("Không tạo được cache protocol delta.");
+        File cached=new File(cacheDir,sha256Text(joined.toString())+".json");
+        if(cached.isFile()){
+            try{
+                JSONObject payload=readJson(cached);
+                JSONArray rows=payload.optJSONArray("results");
+                if(protocolBatchMatches(rows,slugs))return rows;
+            }catch(Exception ignored){}
+            cached.delete();
+        }
+
         String url=base+(base.contains("?")?"&":"?")+"slugs="+URLEncoder.encode(joined.toString(),StandardCharsets.UTF_8.name());
         JSONObject payload=fetchJson(new URL(url),cookie,nonce);
-        JSONArray rows=payload.optJSONArray("results");return rows==null?new JSONArray():rows;
+        JSONArray rows=payload.optJSONArray("results");if(rows==null)rows=new JSONArray();
+        if(protocolBatchMatches(rows,slugs))writeJson(cached,payload);
+        return rows;
+    }
+
+    private File protocolDeltaCacheDir(JSONObject descriptor)throws Exception{
+        String revision=descriptor.optString("revision","");
+        if(revision.isEmpty())revision=descriptor.optString("compat_signature","protocols");
+        return new File(deltaCache,"protocols-"+sha256Text(revision).substring(0,16));
+    }
+
+    private static boolean protocolBatchMatches(JSONArray rows,List<String> slugs){
+        if(rows==null||slugs==null||rows.length()!=slugs.size())return false;
+        HashSet<String> expected=new HashSet<>(slugs);
+        for(int i=0;i<rows.length();i++){
+            JSONObject row=rows.optJSONObject(i);
+            if(row==null||!expected.remove(row.optString("slug","")))return false;
+        }
+        return expected.isEmpty();
     }
 
     private void refreshRuntimeFiles(String cookie,String nonce)throws Exception{
@@ -600,9 +635,34 @@ public final class MedRefDataRuntime {
     private boolean isValidDataset(File dir){return dir!=null&&dir.isDirectory()&&new File(dir,"medref.db").isFile()&&new File(dir,"data-manifest.json").isFile();}
 
     public JSONObject fetchJson(URL url,String cookie,String nonce)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)url.openConnection();c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setInstanceFollowRedirects(true);c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
-        if(cookie!=null&&!cookie.trim().isEmpty())c.setRequestProperty("Cookie",cookie);if(nonce!=null&&!nonce.trim().isEmpty())c.setRequestProperty("X-WP-Nonce",nonce);
-        try{int status=c.getResponseCode();InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();String body=in==null?"":new String(readAll(in),StandardCharsets.UTF_8);if(status<200||status>=300)throw new IOException("HTTP "+status+" "+body.substring(0,Math.min(240,body.length())));return new JSONObject(body);}finally{c.disconnect();}
+        Exception last=null;
+        for(int attempt=1;attempt<=3;attempt++){
+            try{return fetchJsonOnce(url,cookie,nonce);}
+            catch(Exception e){
+                last=e;
+                String m=e.getMessage()==null?"":e.getMessage();
+                if(m.startsWith("HTTP 401")||m.startsWith("HTTP 403")||m.startsWith("HTTP 404"))throw e;
+                if(attempt>=3)break;
+                try{Thread.sleep(650L*attempt);}catch(InterruptedException ie){Thread.currentThread().interrupt();throw ie;}
+            }
+        }
+        throw last==null?new IOException("Không thể tải dữ liệu JSON."):last;
+    }
+
+    private JSONObject fetchJsonOnce(URL url,String cookie,String nonce)throws Exception{
+        HttpURLConnection c=(HttpURLConnection)url.openConnection();
+        c.setConnectTimeout(15000);c.setReadTimeout(120000);c.setInstanceFollowRedirects(true);
+        c.setRequestProperty("Accept","application/json");c.setRequestProperty("Accept-Encoding","gzip");
+        c.setRequestProperty("Connection","keep-alive");c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
+        if(cookie!=null&&!cookie.trim().isEmpty())c.setRequestProperty("Cookie",cookie);
+        if(nonce!=null&&!nonce.trim().isEmpty())c.setRequestProperty("X-WP-Nonce",nonce);
+        try{
+            int status=c.getResponseCode();
+            InputStream in=status>=200&&status<300?c.getInputStream():c.getErrorStream();
+            String body=in==null?"":new String(readAll(in),StandardCharsets.UTF_8);
+            if(status<200||status>=300)throw new IOException("HTTP "+status+" "+body.substring(0,Math.min(240,body.length())));
+            return new JSONObject(body);
+        }finally{c.disconnect();}
     }
 
     private void downloadToFile(URL url,File target,String cookie,String nonce)throws Exception{
@@ -638,6 +698,7 @@ public final class MedRefDataRuntime {
     private static void writeJson(File f,JSONObject j)throws Exception{File p=f.getParentFile();if(p!=null&&!p.exists()&&!p.mkdirs())throw new IOException("mkdir failed");try(FileOutputStream raw=new FileOutputStream(f);BufferedOutputStream out=new BufferedOutputStream(raw)){out.write((j.toString()+"\n").getBytes(StandardCharsets.UTF_8));out.flush();raw.getFD().sync();}}
     private static void copyFile(File src,File dst)throws Exception{File p=dst.getParentFile();if(p!=null&&!p.exists()&&!p.mkdirs())throw new IOException("mkdir failed");Files.copy(src.toPath(),dst.toPath(),StandardCopyOption.REPLACE_EXISTING);}
     private static String sha256(File f)throws Exception{MessageDigest d=MessageDigest.getInstance("SHA-256");try(InputStream in=new BufferedInputStream(new FileInputStream(f))){byte[]b=new byte[65536];int n;while((n=in.read(b))!=-1)d.update(b,0,n);}StringBuilder s=new StringBuilder();for(byte x:d.digest())s.append(String.format(Locale.ROOT,"%02x",x&0xff));return s.toString();}
+    private static String sha256Text(String text)throws Exception{MessageDigest d=MessageDigest.getInstance("SHA-256");d.update((text==null?"":text).getBytes(StandardCharsets.UTF_8));StringBuilder s=new StringBuilder();for(byte x:d.digest())s.append(String.format(Locale.ROOT,"%02x",x&0xff));return s.toString();}
     private static void moveDirectory(File src,File dst)throws Exception{if(dst.exists())deleteRecursively(dst);File p=dst.getParentFile();if(p!=null&&!p.exists())p.mkdirs();try{Files.move(src.toPath(),dst.toPath(),StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(src.toPath(),dst.toPath(),StandardCopyOption.REPLACE_EXISTING);}}
     private static void deleteRecursively(File f)throws IOException{if(f==null||!f.exists())return;if(f.isDirectory()){File[]kids=f.listFiles();if(kids!=null)for(File k:kids)deleteRecursively(k);}if(!f.delete()&&f.exists())throw new IOException("Không xóa được "+f);}
 
