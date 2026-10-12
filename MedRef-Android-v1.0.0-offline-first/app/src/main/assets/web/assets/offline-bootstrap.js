@@ -93,10 +93,25 @@
     if (menu) {
       const home = menu.querySelector('a.mcr-menu-item');
       if (home) { home.href = origin + '/medipharm/'; home.querySelector('span:last-child').textContent = 'Trang chủ MedRef'; }
+      const nativeMethod = {
+        'medref://data-update':'updateData',
+        'medref://check-update':'checkAppUpdate',
+        'medref://rollback-data':'rollbackData',
+        'medref://about':'about',
+        'medref://logout':'logout',
+        'medref://login':'login'
+      };
       const add = (href, icon, label) => {
         const a = document.createElement('a');
         a.className = 'mcr-menu-item'; a.href = href; a.setAttribute('role','menuitem');
         a.innerHTML = '<span class="mcr-menu-icon" aria-hidden="true">'+icon+'</span><span>'+label+'</span>';
+        a.addEventListener('click', e => {
+          const method=nativeMethod[href];
+          if (method && window.MedRefNative && typeof window.MedRefNative[method] === 'function') {
+            e.preventDefault();
+            try { window.MedRefNative[method](); return; } catch (_) {}
+          }
+        }, true);
         menu.appendChild(a);
       };
       add('medref://data-update','↻','Cập nhật dữ liệu');
