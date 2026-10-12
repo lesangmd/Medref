@@ -12,8 +12,6 @@ import android.os.IBinder;
 import android.os.PowerManager;
 import android.util.Log;
 
-import androidx.annotation.Nullable;
-
 public final class DataUpdateService extends Service {
     private static final String TAG="MedRefDataUpdate";
     private static final String CHANNEL_ID="medref_data_update";
@@ -157,5 +155,5 @@ public final class DataUpdateService extends Service {
         return s==null||s.trim().isEmpty()?t.getClass().getSimpleName():s.trim();
     }
 
-    @Nullable @Override public IBinder onBind(Intent intent){return null;}
+    @Override public IBinder onBind(Intent intent){return null;}
 }
