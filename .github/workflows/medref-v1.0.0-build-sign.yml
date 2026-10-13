@@ -1,4 +1,4 @@
-name: Build and Sign MedRef v1.0.0
+name: Build and Sign MedRef Android
 
 on:
   workflow_dispatch:
@@ -70,12 +70,30 @@ jobs:
         shell: bash
         env:
           MEDREF_KEYSTORE_B64: ${{ secrets.MEDREF_KEYSTORE_B64 }}
+          MEDREF_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_KEYSTORE_PASSWORD }}
+          MEDREF_KEY_ALIAS: ${{ secrets.MEDREF_KEY_ALIAS }}
+          MEDREF_KEY_PASSWORD: ${{ secrets.MEDREF_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$MEDREF_KEYSTORE_B64"
+          for secret_name in MEDREF_KEYSTORE_B64 MEDREF_KEYSTORE_PASSWORD MEDREF_KEY_ALIAS MEDREF_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error title=Missing signing secret::Configure $secret_name for this repository before building a signed APK."
+              exit 1
+            fi
+          done
           mkdir -p signing
-          printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks
-          test -s signing/medref-production.jks
+          chmod 700 signing
+          if ! printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks; then
+            echo "::error title=Invalid keystore::MEDREF_KEYSTORE_B64 is not valid base64."
+            exit 1
+          fi
+          chmod 600 signing/medref-production.jks
+          if [[ ! -s signing/medref-production.jks ]] ||
+             ! keytool -list -keystore signing/medref-production.jks \
+               -storepass "$MEDREF_KEYSTORE_PASSWORD" -alias "$MEDREF_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error title=Invalid signing configuration::Check the keystore, store password and key alias."
+            exit 1
+          fi
           echo "MEDREF_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/medref-production.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
@@ -103,14 +121,20 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee APK-SIGNATURE.txt
           "$AAPT" dump badging "$APK" | tee APK-BADGING.txt
           grep -q "package: name='com.medipharm.medref'" APK-BADGING.txt
-          grep -q "versionName='1.0.0'" APK-BADGING.txt
+          BUILD_FILE=MedRef-Android-v1.0.0-offline-first/app/build.gradle
+          VERSION_NAME="$(sed -nE "s/^[[:space:]]*versionName '([^']+)'.*/\1/p" "$BUILD_FILE" | head -n 1)"
+          VERSION_CODE="$(sed -nE "s/^[[:space:]]*versionCode ([0-9]+).*/\1/p" "$BUILD_FILE" | head -n 1)"
+          test -n "$VERSION_NAME"
+          test -n "$VERSION_CODE"
+          grep -Fq "versionName='$VERSION_NAME'" APK-BADGING.txt
+          grep -Fq "versionCode='$VERSION_CODE'" APK-BADGING.txt
           mkdir -p dist
-          cp "$APK" dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk
-          sha256sum dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk | tee dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk.sha256
+          cp "$APK" "dist/MedRef-v${VERSION_NAME}-signed.apk"
+          sha256sum "dist/MedRef-v${VERSION_NAME}-signed.apk" | tee "dist/MedRef-v${VERSION_NAME}-signed.apk.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MedRef-v1.0.0-OFFLINE-FIRST-signed
+          name: MedRef-Android-signed
           path: |
             dist/*
             SOURCE-SHA256.txt
