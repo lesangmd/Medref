@@ -226,6 +226,8 @@ jobs:
           mv medref-update.next.json medref-update.json
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add medref-update.json
-          git commit -m "release: point MedRef Android updater to v${VERSION_NAME} signed baseline"
-          git push origin HEAD:main
+          if ! git diff --quiet -- medref-update.json; then
+            git add medref-update.json
+            git commit -m "release: point MedRef Android updater to v${VERSION_NAME} signed baseline"
+            git push origin HEAD:main
+          fi
