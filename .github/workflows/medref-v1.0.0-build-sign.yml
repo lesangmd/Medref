@@ -204,3 +204,28 @@ jobs:
                 ([.assets[].name] | index($version) != null) and
                 ([.assets[].name] | index("MedRef-latest.apk") != null)
               ' >/dev/null
+      - name: Update Android app manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA256="$(sha256sum "MedRef-v${VERSION_NAME}.apk" | cut -d' ' -f1)"
+          BYTES="$(stat -c%s "MedRef-v${VERSION_NAME}.apk")"
+          jq --arg version "$VERSION_NAME" \
+             --argjson code "$VERSION_CODE" \
+             --arg sha "$SHA256" \
+             --argjson bytes "$BYTES" \
+             --arg source "https://github.com/${GITHUB_REPOSITORY}/releases/download/medref-v${VERSION_NAME}/MedRef-v${VERSION_NAME}.apk" '
+            .versionName=$version |
+            .versionCode=$code |
+            .sha256=$sha |
+            .bytes=$bytes |
+            .sourceDownloadUrl=$source |
+            .downloadUrl="https://github.com/lesangmd/Medref/releases/latest/download/MedRef-latest.apk" |
+            .release="New Signing Baseline"
+          ' medref-update.json > medref-update.next.json
+          mv medref-update.next.json medref-update.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add medref-update.json
+          git commit -m "release: point MedRef Android updater to v${VERSION_NAME} signed baseline"
+          git push origin HEAD:main
