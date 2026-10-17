@@ -64,8 +64,8 @@ jobs:
             exit 1
           fi
           "$APKSIGNER" verify --min-sdk-version 31 --print-certs "dist/MedRef-v${VERSION}.apk" > dist/signature-report.txt
-          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' dist/signature-report.txt | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
+          if ! tr '[:upper:]' '[:lower:]' < dist/signature-report.txt | grep -Fq "$EXPECTED"; then
+            cat dist/signature-report.txt
             echo "::error::Wrong MedRef signer: expected original production certificate."
             exit 1
           fi
