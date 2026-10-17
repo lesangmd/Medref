@@ -44,7 +44,16 @@ public final class DataUpdateService extends Service {
     public static String state(Context c){return c.getSharedPreferences(PREFS,MODE_PRIVATE).getString(EXTRA_STATE,STATE_IDLE);}
     public static int progress(Context c){return c.getSharedPreferences(PREFS,MODE_PRIVATE).getInt(EXTRA_PROGRESS,0);}
     public static String message(Context c){return c.getSharedPreferences(PREFS,MODE_PRIVATE).getString(EXTRA_MESSAGE,"");}
-    public static boolean isRunning(Context c){return STATE_RUNNING.equals(state(c));}
+    public static boolean isRunning(Context c){
+        SharedPreferences p=c.getSharedPreferences(PREFS,MODE_PRIVATE);
+        if(!STATE_RUNNING.equals(p.getString(EXTRA_STATE,STATE_IDLE)))return false;
+        long updated=p.getLong("updated_at",0L),now=System.currentTimeMillis();
+        if(updated>0L&&now>=updated&&now-updated<30L*60L*1000L)return true;
+        p.edit().putString(EXTRA_STATE,STATE_FAILED)
+                .putString(EXTRA_MESSAGE,"Lần cập nhật trước đã bị gián đoạn; có thể thử lại.")
+                .apply();
+        return false;
+    }
 
     @Override public void onCreate(){
         super.onCreate();
@@ -52,7 +61,7 @@ public final class DataUpdateService extends Service {
     }
 
     @Override public int onStartCommand(Intent intent,int flags,int startId){
-        if(workerRunning)return START_REDELIVER_INTENT;
+        if(workerRunning)return START_NOT_STICKY;
         final String cookie=intent==null?"":intent.getStringExtra(EXTRA_COOKIE);
         final String nonce=intent==null?"":intent.getStringExtra(EXTRA_NONCE);
         workerRunning=true;
@@ -60,7 +69,7 @@ public final class DataUpdateService extends Service {
         startForeground(NOTIFICATION_ID,notification("Đang cập nhật dữ liệu MedRef","Đang chuẩn bị…",1,true));
         acquireWakeLock();
         new Thread(()->runUpdate(cookie==null?"":cookie,nonce==null?"":nonce),"MedRef-data-update-service").start();
-        return START_REDELIVER_INTENT;
+        return START_NOT_STICKY;
     }
 
     private void runUpdate(String cookie,String nonce){
