@@ -1,7 +1,12 @@
-name: Build MedRef v1.0.9 Diagnostic
+name: Build MedRef v1.0.10 Diagnostic
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'medref-update.json'
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-v1.0.9-diagnostic.yml'
   push:
     branches: [ main ]
     paths:
@@ -48,6 +53,25 @@ jobs:
       - name: Compile release
         working-directory: MedRef-Android-v1.0.0-offline-first
         run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Verify hosted APK against release candidate manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_URL="$(jq -r '.sourceDownloadUrl' medref-update.json)"
+          SHA="$(jq -r '.sha256' medref-update.json)"
+          BYTES="$(jq -r '.bytes' medref-update.json)"
+          VERSION="$(jq -r '.versionName' medref-update.json)"
+          test "$VERSION" = '1.0.10'
+          test "$BYTES" = '342295'
+          echo "$SHA" | grep -Eq '^[a-f0-9]{64}$'
+          test -n "$APK_URL"
+          curl --fail --location --retry 3 --retry-delay 3 --connect-timeout 15 --max-time 120 \
+            --output /tmp/medref-release-candidate.apk "$APK_URL"
+          printf '%s  %s\n' "$SHA" "/tmp/medref-release-candidate.apk" | sha256sum -c -
+          test "$(wc -c < /tmp/medref-release-candidate.apk | tr -d '[:space:]')" = "$BYTES"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 31 --print-certs /tmp/medref-release-candidate.apk > /tmp/medref-release-certificate.txt
+          grep -Fqi 'f3d869689d9c93b20b5259459bbf2895801c9b07a59dc65e414522db2d6bcd13' /tmp/medref-release-certificate.txt
+          echo 'PASS: website APK reachable, original signature, content SHA256 and size match manifest.'
       - name: Stage diagnostic artifact
         shell: bash
         run: |
@@ -55,13 +79,13 @@ jobs:
           mkdir -p diagnostic-tools/lib diagnostic-tools/lib64
           APK="$(find MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$APK"
-          cp "$APK" diagnostic-tools/MedRef-v1.0.9-BACKGROUND-RESUMABLE-DATA-SYNC-unsigned.apk
+          cp "$APK" diagnostic-tools/MedRef-v1.0.10-STARTUP-SYNC-FIX-unsigned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" diagnostic-tools/lib/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib64/libc++.so" diagnostic-tools/lib64/
-          sha256sum diagnostic-tools/MedRef-v1.0.9-BACKGROUND-RESUMABLE-DATA-SYNC-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
+          sha256sum diagnostic-tools/MedRef-v1.0.10-STARTUP-SYNC-FIX-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: MedRef-v1.0.9-unsigned-diagnostic
+          name: MedRef-v1.0.10-unsigned-diagnostic
           path: diagnostic-tools/

@@ -1,0 +1,12 @@
+{
+  "schema": "medref-app-update/v1",
+  "versionCode": 10010,
+  "versionName": "1.0.10",
+  "minimumAndroidApi": 31,
+  "downloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.10.apk",
+  "sha256": "52725477d38401acf46e30f758a98ba1bfcb8045577f15f155c4e780ecf2d803",
+  "bytes": 342295,
+  "release": "Startup Sync Timeout Fix · Original Signing Certificate",
+  "sourceDownloadUrl": "https://www.sachyhoc.com/wp-content/plugins/medipharm-clinical-reference/assets/android/MedRef-v1.0.10.apk",
+  "githubReleaseUrl": "https://github.com/lesangmd/Medref/releases/latest"
+}

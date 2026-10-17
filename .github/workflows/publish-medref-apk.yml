@@ -25,6 +25,7 @@ jobs:
           VERSION="$(jq -r '.versionName' medref-update.json)"
           VERSION_CODE="$(jq -r '.versionCode' medref-update.json)"
           APK_SHA256="$(jq -r '.sha256' medref-update.json)"
+          APK_BYTES="$(jq -r '.bytes' medref-update.json)"
           SOURCE_APK_URL="$(jq -r '.sourceDownloadUrl // empty' medref-update.json)"
           test -n "$VERSION"
           test "$VERSION" != "null"
@@ -32,9 +33,12 @@ jobs:
           test "$VERSION_CODE" != "null"
           echo "$APK_SHA256" | grep -Eq '^[a-f0-9]{64}$'
           test -n "$SOURCE_APK_URL"
+          [[ "$APK_BYTES" =~ ^[1-9][0-9]*$ ]]
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
           echo "APK_SHA256=$APK_SHA256" >> "$GITHUB_ENV"
+          echo "APK_BYTES=$APK_BYTES" >> "$GITHUB_ENV"
           echo "SOURCE_APK_URL=$SOURCE_APK_URL" >> "$GITHUB_ENV"
 
       - name: Download production-signed APK
@@ -45,7 +49,37 @@ jobs:
           curl --fail --location --retry 3 --retry-delay 3 \
             --output "dist/MedRef-v${VERSION}.apk" "${SOURCE_APK_URL}"
           printf '%s  %s\n' "${APK_SHA256}" "dist/MedRef-v${VERSION}.apk" | sha256sum -c -
+          test "$(wc -c < "dist/MedRef-v${VERSION}.apk" | tr -d '[:space:]')" = "$APK_BYTES"
           cp "dist/MedRef-v${VERSION}.apk" "dist/MedRef-latest.apk"
+
+      - name: Verify original MedRef signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="f3d869689d9c93b20b5259459bbf2895801c9b07a59dc65e414522db2d6bcd13"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error::Android apksigner is unavailable; refusing to publish an unchecked APK."
+            exit 1
+          fi
+          "$APKSIGNER" verify --min-sdk-version 31 --print-certs "dist/MedRef-v${VERSION}.apk" > dist/signature-report.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' dist/signature-report.txt | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Wrong MedRef signer: expected original production certificate."
+            exit 1
+          fi
+          AAPT="$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name aapt -type f | sort -V | tail -n 1)"
+          if [ -z "$AAPT" ] || [ ! -x "$AAPT" ]; then
+            echo "::error::Android aapt is unavailable; refusing to publish an unchecked APK."
+            exit 1
+          fi
+          BADGING="$("$AAPT" dump badging "dist/MedRef-v${VERSION}.apk" | grep '^package:')" 
+          printf '%s\n' "$BADGING"
+          printf '%s\n' "$BADGING" | grep -Fq "name='com.medipharm.medref'"
+          printf '%s\n' "$BADGING" | grep -Fq "versionCode='${VERSION_CODE}'"
+          printf '%s\n' "$BADGING" | grep -Fq "versionName='${VERSION}'"
+          echo "PASS: original MedRef signature, package ID, versionCode and versionName are verified."
 
       - name: Create or update GitHub Release
         shell: bash
