@@ -2,6 +2,10 @@ name: Build MedRef v1.0.9 Diagnostic
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-v1.0.9-diagnostic.yml'
   push:
     branches: [ main ]
     paths:
