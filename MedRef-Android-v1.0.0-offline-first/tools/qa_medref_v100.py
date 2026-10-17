@@ -20,7 +20,7 @@ ck('package', "applicationId 'com.medipharm.medref'" in build)
 ck('app_name', '<string name="app_name">MedRef</string>' in (R/'app/src/main/res/values/strings.xml').read_text())
 ck('min_sdk_31', 'minSdk 31' in build)
 ck('target_sdk_35', 'targetSdk 35' in build and 'compileSdk 35' in build)
-ck('version_1_0_9', "versionName '1.0.9'" in build and 'versionCode 10009' in build)
+ck('version_1_0_10', "versionName '1.0.10'" in build and 'versionCode 10010' in build)
 ck('local_origin', 'app.medref.local' in server and 'app.medref.local' in boot)
 ck('sqlite_runtime', 'SQLiteDatabase' in db and 'medref.db' in runtime)
 ck('sqlite_pragma_api', 'execSQL("PRAGMA journal_mode=WAL")' not in db and 'enableWriteAheadLogging()' in db and 'rawQuery("PRAGMA synchronous=NORMAL"' in db)
@@ -69,7 +69,7 @@ ck('web_assets', all((R/'app/src/main/assets/web/assets'/x).is_file() for x in [
 ck('web_roots', all(x in html for x in ['id="mcr-app"','id="mtp-app"','data-nah-icd10-app']))
 ck('no_cleartext', 'usesCleartextTraffic="false"' in manifest)
 ck('no_mdict_package_residue', 'com.medipharm.mdict' not in ''.join([main,runtime,server,db,build,manifest,boot]))
-summary={'release':'MedRef Android v1.0.9','checks':len(checks),'passed':sum(x[1] for x in checks),'failed':[x[0] for x in checks if not x[1]],'status':'PASS' if all(x[1] for x in checks) else 'FAIL'}
+summary={'release':'MedRef Android v1.0.10','checks':len(checks),'passed':sum(x[1] for x in checks),'failed':[x[0] for x in checks if not x[1]],'status':'PASS' if all(x[1] for x in checks) else 'FAIL'}
 (R/'QA-v1.0.0.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print(json.dumps(summary,ensure_ascii=False))
 sys.exit(0 if summary['status']=='PASS' else 1)
