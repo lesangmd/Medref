@@ -1,4 +1,4 @@
-name: Build MedRef v1.0.9 Diagnostic
+name: Build MedRef v1.0.10 Diagnostic
 
 on:
   workflow_dispatch:
@@ -59,13 +59,13 @@ jobs:
           mkdir -p diagnostic-tools/lib diagnostic-tools/lib64
           APK="$(find MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
           test -n "$APK"
-          cp "$APK" diagnostic-tools/MedRef-v1.0.9-BACKGROUND-RESUMABLE-DATA-SYNC-unsigned.apk
+          cp "$APK" diagnostic-tools/MedRef-v1.0.10-STARTUP-SYNC-FIX-unsigned.apk
           cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/apksigner" diagnostic-tools/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" diagnostic-tools/lib/
           cp "$ANDROID_HOME/build-tools/35.0.0/lib64/libc++.so" diagnostic-tools/lib64/
-          sha256sum diagnostic-tools/MedRef-v1.0.9-BACKGROUND-RESUMABLE-DATA-SYNC-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
+          sha256sum diagnostic-tools/MedRef-v1.0.10-STARTUP-SYNC-FIX-unsigned.apk > diagnostic-tools/UNSIGNED-SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: MedRef-v1.0.9-unsigned-diagnostic
+          name: MedRef-v1.0.10-unsigned-diagnostic
           path: diagnostic-tools/
