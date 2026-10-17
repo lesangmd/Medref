@@ -418,34 +418,80 @@ public final class MedRefDataRuntime {
         progress.done();
     }
 
+    /**
+     * Initial hydration is resumable per committed dataset. An interrupted network
+     * request must not erase previously validated tables or downloaded source media.
+     * The checkpoint is private to the staging slot; active/previous-good stay intact.
+     */
     private void hydrateWithManifest(JSONObject manifest,String cookie,String nonce,ProgressListener listener)throws Exception{
-        if(!"medref-offline-manifest/v1".equals(manifest.optString("schema"))) throw new IllegalArgumentException("Máy chủ chưa cung cấp manifest MedRef tương thích.");
-        if(manifest.optInt("minimum_app_version_code",10000)>BuildConfig.VERSION_CODE) throw new IllegalStateException("Cần cập nhật ứng dụng MedRef trước khi đồng bộ dữ liệu.");
-        deleteRecursively(staging); if(!staging.mkdirs()) throw new IOException("Không tạo được staging.");
-        File mediaDir=new File(staging,"media"); if(!mediaDir.mkdirs()) throw new IOException("Không tạo được media staging.");
-        MedRefDatabase db=MedRefDatabase.create(new File(staging,"medref.db"));
+        if(!"medref-offline-manifest/v1".equals(manifest.optString("schema")))throw new IllegalArgumentException("Máy chủ chưa cung cấp manifest MedRef tương thích.");
+        if(manifest.optInt("minimum_app_version_code",10000)>BuildConfig.VERSION_CODE)throw new IllegalStateException("Cần cập nhật ứng dụng MedRef trước khi đồng bộ dữ liệu.");
+
+        String fingerprint=sha256Text(manifest.optString("data_version","")+"|"
+                +manifest.getJSONObject("datasets").toString()+"|"
+                +manifest.optString("runtime_revision","")+"|"
+                +manifest.optString("media_catalog_sha256","")+"|"+BuildConfig.VERSION_CODE);
+        File checkpoint=new File(staging,"hydration-checkpoint.json");
+        JSONObject state=null;
+        if(new File(staging,"medref.db").isFile()&&checkpoint.isFile()){
+            try{
+                JSONObject previousState=readJson(checkpoint);
+                if(fingerprint.equals(previousState.optString("fingerprint",""))
+                        &&previousState.optJSONObject("completed")!=null)state=previousState;
+            }catch(Exception ignored){ /* Invalid checkpoint: start from an empty staging slot. */ }
+        }
+        boolean resume=state!=null;
+        if(!resume){
+            deleteRecursively(staging);
+            if(!staging.mkdirs())throw new IOException("Không tạo được staging.");
+            state=new JSONObject().put("fingerprint",fingerprint).put("completed",new JSONObject());
+            writeHydrationCheckpoint(checkpoint,state);
+        }
+        File mediaDir=new File(staging,"media");
+        if(!mediaDir.exists()&&!mediaDir.mkdirs())throw new IOException("Không tạo được media staging.");
+
+        MedRefDatabase db=resume
+                ?MedRefDatabase.openReadWrite(new File(staging,"medref.db"))
+                :MedRefDatabase.create(new File(staging,"medref.db"));
         Progress progress=new Progress(manifest,listener);
         try{
-            db.begin();
-            hydrateDataset(manifest,"protocols",cookie,nonce,progress,(row)->db.insertProtocol(row));
-            hydrateDataset(manifest,"icd",cookie,nonce,progress,(row)->db.insertIcd(row));
-            hydrateDataset(manifest,"pl3",cookie,nonce,progress,(row)->db.insertPl3(row));
-            hydrateDataset(manifest,"yhct",cookie,nonce,progress,(row)->db.insertYhct(row));
-            hydrateDataset(manifest,"guides",cookie,nonce,progress,(row)->db.insertGuide(row));
-            hydrateDataset(manifest,"synonyms",cookie,nonce,progress,(row)->db.insertSynonym(row));
-            db.success();
-        } finally { db.end(); }
+            JSONObject completed=state.getJSONObject("completed");
+            for(String key:new String[]{"protocols","icd","pl3","yhct","guides","synonyms"}){
+                int expected=datasetCount(manifest,key,-1);
+                if(completed.optBoolean(key,false)
+                        &&expected>=0&&db.datasetCount(key)==expected){
+                    if(listener!=null)listener.onProgress(1,"Đang tiếp tục từ dữ liệu "+Progress.datasetLabel(key)+" đã tải…");
+                    continue;
+                }
+                db.begin();
+                try{
+                    db.clearDataset(key);
+                    if("protocols".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertProtocol(row));
+                    else if("icd".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertIcd(row));
+                    else if("pl3".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertPl3(row));
+                    else if("yhct".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertYhct(row));
+                    else if("guides".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertGuide(row));
+                    else if("synonyms".equals(key))hydrateDataset(manifest,key,cookie,nonce,progress,(row)->db.insertSynonym(row));
+                    int actual=db.datasetCount(key);
+                    if(expected>=0&&actual!=expected)throw new IOException("Count mismatch "+key+": "+actual+"/"+expected);
+                    db.success();
+                }finally{db.end();}
+                completed.put(key,true);
+                writeHydrationCheckpoint(checkpoint,state);
+            }
+        }finally{db.close();}
 
-        saveRuntimeJson("dashboard.json",fetchJson(new URL(MCR_BASE+"dashboard"),cookie,nonce));
-        saveRuntimeJson("specialties-protocol.json",fetchJson(new URL(MTP_BASE+"specialties?content_type=protocol"),cookie,nonce));
-        saveRuntimeJson("specialties-procedure.json",fetchJson(new URL(MTP_BASE+"specialties?content_type=procedure"),cookie,nonce));
-        saveRuntimeJson("status.json",fetchJson(new URL(MTP_BASE+"status"),cookie,nonce));
-        saveRuntimeJson("icd-stats.json",fetchJson(new URL(ICD_BASE+"stats"),cookie,nonce));
+        hydrateRuntimeJson("dashboard.json",new URL(MCR_BASE+"dashboard"),cookie,nonce);
+        hydrateRuntimeJson("specialties-protocol.json",new URL(MTP_BASE+"specialties?content_type=protocol"),cookie,nonce);
+        hydrateRuntimeJson("specialties-procedure.json",new URL(MTP_BASE+"specialties?content_type=procedure"),cookie,nonce);
+        hydrateRuntimeJson("status.json",new URL(MTP_BASE+"status"),cookie,nonce);
+        hydrateRuntimeJson("icd-stats.json",new URL(ICD_BASE+"stats"),cookie,nonce);
 
         hydrateMedia(manifest,cookie,nonce,mediaDir,progress);
 
-        JSONObject counts=db.counts();
-        db.close();
+        JSONObject counts;
+        MedRefDatabase verify=MedRefDatabase.openReadWrite(new File(staging,"medref.db"));
+        try{counts=verify.counts();}finally{verify.close();}
         validateCounts(manifest,counts);
         JSONObject local=new JSONObject(manifest.toString());
         local.put("installed_at",System.currentTimeMillis());
@@ -454,9 +500,23 @@ public final class MedRefDataRuntime {
         local.put("counts_effective",counts);
         local.put("media_complete",true);
         writeJson(new File(staging,"data-manifest.json"),local);
-        if(!isValidDataset(staging)) throw new IOException("Staging dataset không hợp lệ.");
+        if(!isValidDataset(staging))throw new IOException("Staging dataset không hợp lệ.");
         activateStaging();
         progress.done();
+    }
+
+    private void hydrateRuntimeJson(String name,URL url,String cookie,String nonce)throws Exception{
+        File target=new File(staging,name);
+        if(target.isFile()){
+            try{readJson(target);return;}catch(Exception ignored){ /* Re-fetch incomplete file. */ }
+        }
+        saveRuntimeJson(name,fetchJson(url,cookie,nonce));
+    }
+
+    private static void writeHydrationCheckpoint(File target,JSONObject value)throws Exception{
+        File temp=new File(target.getParentFile(),target.getName()+".part");
+        writeJson(temp,value);
+        Files.move(temp.toPath(),target.toPath(),StandardCopyOption.REPLACE_EXISTING);
     }
 
     private interface RowConsumer { void accept(JSONObject row) throws Exception; }
@@ -636,14 +696,16 @@ public final class MedRefDataRuntime {
 
     public JSONObject fetchJson(URL url,String cookie,String nonce)throws Exception{
         Exception last=null;
-        for(int attempt=1;attempt<=3;attempt++){
+        // Only retry transient network/server errors; 4xx and malformed JSON are not transient.
+        for(int attempt=1;attempt<=2;attempt++){
             try{return fetchJsonOnce(url,cookie,nonce);}
             catch(Exception e){
                 last=e;
                 String m=e.getMessage()==null?"":e.getMessage();
-                if(m.startsWith("HTTP 401")||m.startsWith("HTTP 403")||m.startsWith("HTTP 404"))throw e;
-                if(attempt>=3)break;
-                try{Thread.sleep(650L*attempt);}catch(InterruptedException ie){Thread.currentThread().interrupt();throw ie;}
+                if(!(e instanceof IOException)
+                        ||(m.matches("(?s)^HTTP 4[0-9][0-9].*")&&!m.startsWith("HTTP 429")))throw e;
+                if(attempt>=2)break;
+                try{Thread.sleep(750L*attempt);}catch(InterruptedException ie){Thread.currentThread().interrupt();throw ie;}
             }
         }
         throw last==null?new IOException("Không thể tải dữ liệu JSON."):last;
@@ -651,8 +713,10 @@ public final class MedRefDataRuntime {
 
     private JSONObject fetchJsonOnce(URL url,String cookie,String nonce)throws Exception{
         HttpURLConnection c=(HttpURLConnection)url.openConnection();
-        c.setConnectTimeout(15000);c.setReadTimeout(120000);c.setInstanceFollowRedirects(true);
-        c.setRequestProperty("Accept","application/json");c.setRequestProperty("Accept-Encoding","gzip");
+        c.setConnectTimeout(15000);c.setReadTimeout(45000);c.setInstanceFollowRedirects(true);
+        // Do not force gzip: Android HttpURLConnection handles compression automatically
+        // only when its own Accept-Encoding negotiation is used.
+        c.setRequestProperty("Accept","application/json");
         c.setRequestProperty("Connection","keep-alive");c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
         if(cookie!=null&&!cookie.trim().isEmpty())c.setRequestProperty("Cookie",cookie);
         if(nonce!=null&&!nonce.trim().isEmpty())c.setRequestProperty("X-WP-Nonce",nonce);
