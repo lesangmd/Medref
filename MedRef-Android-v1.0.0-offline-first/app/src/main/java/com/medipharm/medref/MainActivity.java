@@ -6,6 +6,7 @@ import android.app.Dialog;
 import android.app.DownloadManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Insets;
@@ -61,6 +62,9 @@ import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
     private static final String TAG="MedRef";
+    private static final String STARTUP_PREFS="medref_startup_sync";
+    private static final long INITIAL_SYNC_RETRY_COOLDOWN_MS=6L*60L*60L*1000L;
+    private static final long SILENT_CHECK_INTERVAL_MS=12L*60L*60L*1000L;
     private static final String START_URL=LocalContentServer.ORIGIN+"/index.html";
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
@@ -111,7 +115,19 @@ public final class MainActivity extends Activity {
         }
         if(networkAvailable()&&isMemberAuthenticated()){
             if(dataRuntime.hasActiveData())reauthenticateAndOpen();
-            else syncData(true);
+            else {
+                SharedPreferences p=getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE);
+                long last=p.getLong("last_automatic_hydration",0L);
+                long now=System.currentTimeMillis();
+                if(last>0L && now>=last && now-last<INITIAL_SYNC_RETRY_COOLDOWN_MS) {
+                    showGate("Chưa có dữ liệu ngoại tuyến",
+                            "Lần tải dữ liệu trước chưa hoàn tất. MedRef sẽ không tự tải lại liên tục khi khởi động. Kiểm tra kết nối rồi chọn Tải dữ liệu để tiếp tục.",
+                            "Tải dữ liệu",v->syncData(true),"Đăng nhập lại",v->showEmbeddedLogin());
+                } else {
+                    p.edit().putLong("last_automatic_hydration",now).apply();
+                    syncData(true);
+                }
+            }
             return;
         }
         String msg=dataRuntime.hasActiveData()?"Phiên xác thực offline đã hết hạn. Đăng nhập MEDIPHARM để tiếp tục sử dụng ngay dữ liệu đã tải.":"Đăng nhập MEDIPHARM lần đầu để tải đầy đủ dữ liệu phác đồ, quy trình, ICD-10 và bảng/hình nguồn về thiết bị.";
@@ -251,6 +267,10 @@ public final class MainActivity extends Activity {
     private void scheduleBackgroundDataPreflight(){
         if(backgroundUpdateCheckRunning||syncRunning||DataUpdateService.isRunning(this)||dataRuntime==null||!dataRuntime.hasActiveData())return;
         if(!networkAvailable()||!isMemberAuthenticated())return;
+        SharedPreferences p=getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE);
+        long now=System.currentTimeMillis(),last=p.getLong("last_silent_check",0L);
+        if(last>0L && now>=last && now-last<SILENT_CHECK_INTERVAL_MS)return;
+        p.edit().putLong("last_silent_check",now).apply();
         backgroundUpdateCheckRunning=true;
         new Thread(()->{
             try{
@@ -401,6 +421,7 @@ public final class MainActivity extends Activity {
                 if(!plan.hasChanges()){
                     main.post(()->{
                         syncRunning=false;
+                        getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
                         loadLocalApp();
                         if(visible)Toast.makeText(this,"Dữ liệu MedRef đang ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
                     });
@@ -410,6 +431,7 @@ public final class MainActivity extends Activity {
                 dataRuntime.applyUpdate(plan,cookie,nonce,l);
                 main.post(()->{
                     syncRunning=false;
+                    getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
                     loadLocalApp();
                     if(visible)Toast.makeText(this,"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_SHORT).show();
                 });
@@ -420,7 +442,7 @@ public final class MainActivity extends Activity {
                     if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
                         loadLocalApp();
                         if(visible)Toast.makeText(this,"Đồng bộ chưa hoàn tất; đang dùng dữ liệu cục bộ gần nhất.",Toast.LENGTH_LONG).show();
-                    }else if(visible)showGate("Chưa thể đồng bộ dữ liệu",safe(e),"Thử lại",v->checkDataUpdateInteractive(),"Đăng nhập lại",v->showEmbeddedLogin());
+                    }else if(visible)showGate("Chưa thể đồng bộ dữ liệu",safe(e)+"\n\nCác phần đã tải thành công sẽ được giữ để tiếp tục khi thử lại.","Tiếp tục tải",v->syncData(true),"Đăng nhập lại",v->showEmbeddedLogin());
                 });
             }
         },"MedRef-sync").start();
