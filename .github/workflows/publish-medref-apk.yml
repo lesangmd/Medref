@@ -47,6 +47,25 @@ jobs:
           printf '%s  %s\n' "${APK_SHA256}" "dist/MedRef-v${VERSION}.apk" | sha256sum -c -
           cp "dist/MedRef-v${VERSION}.apk" "dist/MedRef-latest.apk"
 
+      - name: Verify original MedRef signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED="f3d869689d9c93b20b5259459bbf2895801c9b07a59dc65e414522db2d6bcd13"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -mindepth 2 -maxdepth 2 -name apksigner -type f | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ] || [ ! -x "$APKSIGNER" ]; then
+            echo "::error::Android apksigner is unavailable; refusing to publish an unchecked APK."
+            exit 1
+          fi
+          "$APKSIGNER" verify --min-sdk-version 31 --print-certs "dist/MedRef-v${VERSION}.apk" > dist/signature-report.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' dist/signature-report.txt | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Wrong MedRef signer: expected original production certificate."
+            exit 1
+          fi
+          echo "PASS: original MedRef production signature is unchanged."
+
       - name: Create or update GitHub Release
         shell: bash
         env:
