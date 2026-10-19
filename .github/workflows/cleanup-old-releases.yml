@@ -1,0 +1,37 @@
+name: Cleanup old releases
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cleanup-old-releases.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Keep only latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "KEEP latest release: medref-v1.0.10"
+          for id in 403270481; do
+            code="$(curl -sS -o /dev/null -w "%{http_code}"               -X DELETE               -H "Authorization: Bearer ${GH_TOKEN}"               -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/${id}")"
+            echo "DELETE release id=${id} HTTP=${code}"
+            [ "${code}" = "204" ] || [ "${code}" = "404" ]
+          done
+
+          for tag in medref-v1.0.6; do
+            git push origin ":refs/tags/${tag}" || true
+          done
