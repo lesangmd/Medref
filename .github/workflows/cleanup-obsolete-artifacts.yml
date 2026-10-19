@@ -1,0 +1,47 @@
+name: Cleanup obsolete Actions artifacts
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/cleanup-obsolete-artifacts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all reproducible Actions artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          deleted=0
+          freed=0
+          while :; do
+            json="$(curl -fsSL               -H "Authorization: Bearer ${GH_TOKEN}"               -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100&page=${page}")"
+            count="$(jq '.artifacts | length' <<<"$json")"
+            [ "$count" -eq 0 ] && break
+            while IFS=$'\t' read -r id name size expired created; do
+              code="$(curl -sS -o /dev/null -w "%{http_code}"                 -X DELETE                 -H "Authorization: Bearer ${GH_TOKEN}"                 -H "Accept: application/vnd.github+json"                 "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}")"
+              if [ "$code" = "204" ]; then
+                echo "DELETE id=$id size=$size name=$name"
+                deleted=$((deleted+1))
+                freed=$((freed+size))
+              else
+                echo "WARN HTTP $code id=$id name=$name"
+              fi
+            done < <(jq -r '.artifacts[] | [.id,.name,.size_in_bytes,.expired,.created_at] | @tsv' <<<"$json")
+            [ "$count" -lt 100 ] && break
+            page=$((page+1))
+          done
+          echo "CLEANUP_DELETED=$deleted"
+          echo "CLEANUP_FREED_BYTES=$freed"
+          echo "CLEANUP_FREED_MIB=$(awk "BEGIN {printf \"%.2f\", $freed/1048576}")"
