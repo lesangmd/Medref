@@ -58,6 +58,26 @@ jobs:
         with:
           name: MedRef-v1.0.11-unsigned-diagnostic
           path: out/MedRef-v1.0.11-DIAGNOSTIC-unsigned.apk
+      - name: Build separately installable debug test APK
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          APK='app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 31 "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.medipharm.medref.debug'"
+          mkdir -p ../out
+          cp "$APK" ../out/MedRef-v1.0.11-TEST-debug.apk
+          sha256sum ../out/MedRef-v1.0.11-TEST-debug.apk > ../out/DEBUG-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-v1.0.11-INSTALLABLE-DEBUG-TEST
+          path: |
+            out/MedRef-v1.0.11-TEST-debug.apk
+            out/DEBUG-SHA256.txt
+
       - name: Restore existing MedRef signing identity
         shell: bash
         env:
