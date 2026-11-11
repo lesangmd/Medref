@@ -277,6 +277,17 @@ public final class MainActivity extends Activity {
                 String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
                 MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
                 cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
+                // The first hydration activates the clinical library before media.
+                // After interruption, resume only pending media automatically.
+                if(plan.mediaChanged && plan.changedDatasets.isEmpty() && !plan.runtimeChanged){
+                    main.post(()->{
+                        if(!DataUpdateService.isRunning(this) && !syncRunning && dataRuntime!=null
+                                && dataRuntime.hasValidOfflineSession()){
+                            try{DataUpdateService.start(this,cookie,nonce);}
+                            catch(Exception e){Log.w(TAG,"resume media update",e);}
+                        }
+                    });
+                }
             }catch(Exception e){
                 Log.w(TAG,"background update preflight",e);
             }finally{
