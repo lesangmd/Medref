@@ -203,7 +203,7 @@ public final class MainActivity extends Activity {
     private void showSyncProgress(int pct,String msg){
         gate.setVisibility(View.VISIBLE);webContainer.setVisibility(View.GONE);
         gateTitle.setText("Đang đồng bộ dữ liệu");
-        gateMessage.setText("MedRef đang chuẩn bị dữ liệu phác đồ, quy trình, ICD-10 và hình/bảng nguồn để sử dụng offline.");
+        gateMessage.setText("Đang tải và kiểm tra dữ liệu lâm sàng để mở thư viện. Hình/bảng nguồn sẽ được tải sau trong nền.");
         progress.setVisibility(View.VISIBLE);progress.setProgress(Math.max(1,pct));
         progressText.setVisibility(View.VISIBLE);progressText.setText(msg+"  ·  "+pct+"%");
         primaryButton.setVisibility(View.VISIBLE);primaryButton.setEnabled(false);primaryButton.setAlpha(.88f);primaryButton.setText("↻  Đang đồng bộ dữ liệu…");primaryButton.setBackground(buttonBackground(Color.rgb(16,143,150),0));
@@ -433,7 +433,15 @@ public final class MainActivity extends Activity {
                     syncRunning=false;
                     getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
                     loadLocalApp();
-                    if(visible)Toast.makeText(this,"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_SHORT).show();
+                    if(plan.fullHydrate){
+                        // The first hydrate is clinical-data-first. Complete media
+                        // using the foreground service after opening the app.
+                        try{DataUpdateService.start(this,cookie,nonce);}
+                        catch(Exception serviceError){Log.w(TAG,"deferred initial media",serviceError);}
+                    }
+                    if(visible)Toast.makeText(this,plan.fullHydrate
+                            ?"Thư viện đã sẵn sàng. Hình/bảng nguồn đang tải trong nền."
+                            :"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_LONG).show();
                 });
             }catch(Exception e){
                 Log.e(TAG,"sync",e);
