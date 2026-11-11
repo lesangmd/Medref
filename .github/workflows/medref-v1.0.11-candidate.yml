@@ -51,9 +51,9 @@ jobs:
           set -euo pipefail
           gradle --no-daemon --stacktrace :app:assembleRelease
           test -s app/build/outputs/apk/release/app-release-unsigned.apk
-          mkdir -p ../../out
-          cp app/build/outputs/apk/release/app-release-unsigned.apk ../../out/MedRef-v1.0.11-DIAGNOSTIC-unsigned.apk
-          sha256sum ../../out/MedRef-v1.0.11-DIAGNOSTIC-unsigned.apk > ../../out/UNSIGNED-SHA256.txt
+          mkdir -p ../out
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../out/MedRef-v1.0.11-DIAGNOSTIC-unsigned.apk
+          sha256sum ../out/MedRef-v1.0.11-DIAGNOSTIC-unsigned.apk > ../out/UNSIGNED-SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: MedRef-v1.0.11-unsigned-diagnostic
