@@ -434,20 +434,28 @@ public final class MedRefDataRuntime {
         if(!"medref-offline-manifest/v1".equals(manifest.optString("schema")))throw new IllegalArgumentException("Máy chủ chưa cung cấp manifest MedRef tương thích.");
         if(manifest.optInt("minimum_app_version_code",10000)>BuildConfig.VERSION_CODE)throw new IllegalStateException("Cần cập nhật ứng dụng MedRef trước khi đồng bộ dữ liệu.");
 
-        String fingerprint=sha256Text(manifest.optString("data_version","")+"|"
+        String checkpointIdentity=manifest.optString("data_version","")+"|"
                 +manifest.getJSONObject("datasets").toString()+"|"
                 +manifest.optString("runtime_revision","")+"|"
-                +manifest.optString("media_catalog_sha256","")+"|"+BuildConfig.VERSION_CODE);
+                +manifest.optString("media_catalog_sha256","");
+        String fingerprint=sha256Text(checkpointIdentity+"|"+BuildConfig.VERSION_CODE);
+        // Upgrade from 1.0.10 must not discard verified, committed staging rows.
+        String previousApkFingerprint=sha256Text(checkpointIdentity+"|10010");
         File checkpoint=new File(staging,"hydration-checkpoint.json");
         JSONObject state=null;
         if(new File(staging,"medref.db").isFile()&&checkpoint.isFile()){
             try{
                 JSONObject previousState=readJson(checkpoint);
-                if(fingerprint.equals(previousState.optString("fingerprint",""))
+                if((fingerprint.equals(previousState.optString("fingerprint",""))
+                        || previousApkFingerprint.equals(previousState.optString("fingerprint","")))
                         &&previousState.optJSONObject("completed")!=null)state=previousState;
             }catch(Exception ignored){ /* Invalid checkpoint: start from an empty staging slot. */ }
         }
         boolean resume=state!=null;
+        if(resume&&!fingerprint.equals(state.optString("fingerprint",""))){
+            state.put("fingerprint",fingerprint);
+            writeHydrationCheckpoint(checkpoint,state);
+        }
         if(!resume){
             deleteRecursively(staging);
             if(!staging.mkdirs())throw new IOException("Không tạo được staging.");
