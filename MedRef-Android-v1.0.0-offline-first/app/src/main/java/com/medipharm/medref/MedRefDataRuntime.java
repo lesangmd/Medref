@@ -180,7 +180,7 @@ public final class MedRefDataRuntime {
         }finally{db.close();}
         String remoteMedia=remote.optString("media_catalog_sha256","");
         String localMedia=local.optString("media_catalog_sha256","");
-        boolean mediaChanged=!remoteMedia.isEmpty()&&!remoteMedia.equals(localMedia);
+        boolean mediaChanged=!local.optBoolean("media_complete",true)||(!remoteMedia.isEmpty()&&!remoteMedia.equals(localMedia));
         String remoteRuntime=remote.optString("runtime_revision","");
         String localRuntime=local.optString("runtime_revision","");
         boolean runtimeChanged;
@@ -197,7 +197,14 @@ public final class MedRefDataRuntime {
         if(!plan.hasChanges()){markAuthVerified();return false;}
         if(!plan.changedDatasets.isEmpty())refreshDatasetsWithManifest(plan.remote,plan.changedDatasets,cookie,nonce,listener);
         if(plan.runtimeChanged)refreshRuntimeFiles(cookie,nonce);
-        if(plan.mediaChanged)refreshMediaWithManifest(plan.remote,cookie,nonce,listener);
+        if(plan.mediaChanged){
+            // Mark media complete only after every item has passed integrity verification.
+            // Failures leave the previous manifest pending for a resumable retry.
+            refreshMediaWithManifest(plan.remote,cookie,nonce,listener);
+            JSONObject mediaState=readJson(new File(active,"data-manifest.json"));
+            mediaState.put("media_complete",true);
+            writeJson(new File(active,"data-manifest.json"),mediaState);
+        }
         JSONObject local=readJson(new File(active,"data-manifest.json"));
         mergeRemoteManifestMetadata(local,plan.remote);
         markAuthVerified();
@@ -487,8 +494,9 @@ public final class MedRefDataRuntime {
         hydrateRuntimeJson("status.json",new URL(MTP_BASE+"status"),cookie,nonce);
         hydrateRuntimeJson("icd-stats.json",new URL(ICD_BASE+"stats"),cookie,nonce);
 
-        hydrateMedia(manifest,cookie,nonce,mediaDir,progress);
-
+        // First installation must never block access to verified clinical datasets
+        // while images and source tables are downloaded. Full media sync runs
+        // separately in DataUpdateService after the core library is activated.
         JSONObject counts;
         MedRefDatabase verify=MedRefDatabase.openReadWrite(new File(staging,"medref.db"));
         try{counts=verify.counts();}finally{verify.close();}
@@ -498,11 +506,14 @@ public final class MedRefDataRuntime {
         local.put("app_version",BuildConfig.VERSION_NAME);
         local.put("app_version_code",BuildConfig.VERSION_CODE);
         local.put("counts_effective",counts);
-        local.put("media_complete",true);
+        local.put("media_complete",false);
+        // An empty local catalog signature explicitly queues a background media pass.
+        // Keep this distinct from the remote signature until all media validate.
+        local.put("media_catalog_sha256","");
         writeJson(new File(staging,"data-manifest.json"),local);
         if(!isValidDataset(staging))throw new IOException("Staging dataset không hợp lệ.");
         activateStaging();
-        progress.done();
+        if(listener!=null)listener.onProgress(100,"Dữ liệu lâm sàng đã sẵn sàng. Hình/bảng nguồn sẽ tải tiếp trong nền.");
     }
 
     private void hydrateRuntimeJson(String name,URL url,String cookie,String nonce)throws Exception{
@@ -528,9 +539,10 @@ public final class MedRefDataRuntime {
             JSONObject payload=fetchJson(new URL(url+(url.contains("?")?"&":"?")+"limit="+page+"&offset="+offset),cookie,nonce);
             JSONArray rows=payload.optJSONArray("results"); if(rows==null)rows=new JSONArray();
             for(int i=0;i<rows.length();i++){JSONObject row=rows.optJSONObject(i);if(row!=null){consumer.accept(row);progress.advance(key);}}
-            offset=payload.optInt("next_offset",offset+rows.length());
+            int next=payload.optInt("next_offset",offset+rows.length());
             if(!payload.optBoolean("has_more",false))break;
-            if(rows.length()==0)throw new IOException("Dataset "+key+" trả về trang rỗng trước khi hoàn tất.");
+            if(rows.length()==0||next<=offset)throw new IOException("Dataset "+key+" có con trỏ phân trang không tiến lên.");
+            offset=next;
         }while(true);
     }
 
@@ -553,9 +565,10 @@ public final class MedRefDataRuntime {
             JSONObject payload=fetchJson(new URL(url+(url.contains("?")?"&":"?")+"limit="+page+"&offset="+offset),cookie,nonce);
             JSONArray rows=payload.optJSONArray("results");if(rows==null)rows=new JSONArray();
             for(int i=0;i<rows.length();i++){JSONObject item=rows.optJSONObject(i);if(item!=null)items.add(item);}
-            offset=payload.optInt("next_offset",offset+rows.length());
+            int next=payload.optInt("next_offset",offset+rows.length());
             if(!payload.optBoolean("has_more",false))break;
-            if(rows.length()==0)throw new IOException("Media catalog trả về trang rỗng trước khi hoàn tất.");
+            if(rows.length()==0||next<=offset)throw new IOException("Media catalog có con trỏ phân trang không tiến lên.");
+            offset=next;
         }while(true);
         return items;
     }
@@ -626,7 +639,7 @@ public final class MedRefDataRuntime {
     }
 
     private void hydrateMediaParallel(List<JSONObject> items,String cookie,String nonce,File mediaDir,Progress progress)throws Exception{
-        int workers=Math.max(1,Math.min(4,items.size()));
+        int workers=Math.max(1,Math.min(2,items.size()));
         ExecutorService pool=Executors.newFixedThreadPool(workers);
         List<Future<?>> futures=new ArrayList<>();
         try{
