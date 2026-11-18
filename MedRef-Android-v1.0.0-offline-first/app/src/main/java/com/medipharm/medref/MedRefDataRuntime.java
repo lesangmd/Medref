@@ -290,6 +290,23 @@ public final class MedRefDataRuntime {
 
         int totalOps=changedSlugs.size()+removedSlugs.size();
         if(totalOps==0)return;
+        // A large import must not generate hundreds of per-record batch queries.
+        // Replace the entire protocol table atomically from the prepared snapshot.
+        if(changedSlugs.size()>100){
+            MedRefDatabase replacement=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+            try{
+                replacement.begin();
+                replacement.clearDataset("protocols");
+                hydrateProtocolSnapshot(descriptor,cookie,nonce,row->replacement.insertProtocol(row),
+                        new Progress(remote,listener,java.util.Collections.singletonList("protocols")));
+                int count=replacement.datasetCount("protocols");
+                int expected=datasetCount(remote,"protocols",-1);
+                if(expected>=0&&count!=expected)
+                    throw new IOException("Protocol snapshot count mismatch: "+count+"/"+expected);
+                replacement.success();
+            }finally{replacement.end();replacement.close();}
+            return;
+        }
         if(listener!=null)listener.onProgress(1,"Đang chuẩn bị cập nhật "+totalOps+" phác đồ/quy trình thay đổi…");
 
         int batchSize=Math.max(1,Math.min(30,descriptor.optInt("batch_size",20)));
@@ -340,9 +357,10 @@ public final class MedRefDataRuntime {
                 String slug=row.optString("slug",""),updated=row.optString("updated_at","");
                 if(!slug.isEmpty())out.put(slug,updated);
             }
-            offset=page.optInt("next_offset",offset+rows.length());
+            int next=page.optInt("next_offset",offset+rows.length());
             if(!page.optBoolean("has_more",false))break;
-            if(rows.length()==0)throw new IOException("Protocol delta index trả về trang rỗng trước khi hoàn tất.");
+            if(rows.length()==0||next<=offset)throw new IOException("Protocol delta index có con trỏ phân trang không tiến lên.");
+            offset=next;
         }while(true);
         int expected=descriptor.optInt("count",-1);
         if(expected>=0&&out.size()!=expected)throw new IOException("Protocol index count mismatch: "+out.size()+"/"+expected);
