@@ -77,7 +77,7 @@ ck('nonblocking_first_media', 'local.put("media_complete",false)' in runtime and
 ck('resume_v1010_checkpoint', 'previousApkFingerprint' in runtime and 'hydration-checkpoint.json' in runtime)
 ck('paginate_guard', runtime.count('next<=offset') >= 2)
 ck('shared_host_media_concurrency', 'Math.min(2,items.size())' in runtime)
-ck('auto_retry_pending_media', 'plan.mediaChanged && plan.changedDatasets.isEmpty()' in main)
+ck('media_only_on_user_request', 'plan.mediaChanged && plan.changedDatasets.isEmpty()' not in main and 'Cập nhật dữ liệu' in main)
 ck('native_actions', all(x in main for x in ['"medref".equals(scheme)','data-update','rollback-data','check-update']))
 ck('web_assets', all((R/'app/src/main/assets/web/assets'/x).is_file() for x in ['mcr-app.css','mcr-app.js','mtp-app.css','mtp-app.js','nah-icd10.css','nah-icd10.js','offline-bootstrap.js']))
 ck('web_roots', all(x in html for x in ['id="mcr-app"','id="mtp-app"','data-nah-icd10-app']))
