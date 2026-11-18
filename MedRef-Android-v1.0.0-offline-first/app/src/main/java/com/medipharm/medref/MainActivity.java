@@ -57,8 +57,6 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
     private static final String TAG="MedRef";
@@ -69,7 +67,6 @@ public final class MainActivity extends Activity {
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
     private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OfflineFirst";
-    private static final Pattern NONCE_RE=Pattern.compile("\\\"restNonce\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private FrameLayout root,webContainer;
@@ -467,9 +464,73 @@ public final class MainActivity extends Activity {
         },"MedRef-sync").start();
     }
 
+    /**
+     * WordPress REST cookie authentication requires an action-specific nonce.
+     * Fetch it from the authenticated core AJAX route first, using WebView cookies
+     * scoped to the actual AJAX URL. The front-end HTML is a legacy fallback only.
+     */
     private String fetchRestNonce(String cookie)throws Exception{
-        HttpURLConnection c=(HttpURLConnection)new URL(MedRefDataRuntime.REMOTE_ROOT+"/medipharm/").openConnection();c.setConnectTimeout(10000);c.setReadTimeout(20000);c.setInstanceFollowRedirects(true);c.setRequestProperty("Accept","text/html");c.setRequestProperty("Cookie",cookie);c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
-        try{int status=c.getResponseCode();if(status<200||status>=300)throw new IllegalStateException("Không thể mở phiên MEDIPHARM (HTTP "+status+").");StringBuilder b=new StringBuilder();try(BufferedReader r=new BufferedReader(new InputStreamReader(c.getInputStream()))){String line;while((line=r.readLine())!=null)b.append(line).append('\n');}Matcher m=NONCE_RE.matcher(b);if(!m.find())throw new IllegalStateException("Không nhận được REST nonce. Hãy đăng nhập lại.");return m.group(1);}finally{c.disconnect();}
+        Exception ajaxFailure=null;
+        try{
+            String endpoint=MedRefDataRuntime.REMOTE_ROOT+"/wp-admin/admin-ajax.php?action=rest-nonce";
+            String cookies=CookieManager.getInstance().getCookie(endpoint);
+            if(cookies==null||cookies.trim().isEmpty())throw new IllegalStateException("Không tìm thấy cookie đăng nhập WordPress.");
+            HttpURLConnection c=(HttpURLConnection)new URL(endpoint).openConnection();
+            c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setUseCaches(false);
+            c.setInstanceFollowRedirects(false);
+            c.setRequestProperty("Cookie",cookies);
+            c.setRequestProperty("Accept","text/plain");
+            c.setRequestProperty("Cache-Control","no-cache, no-store");
+            c.setRequestProperty("Pragma","no-cache");
+            c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
+            try{
+                int status=c.getResponseCode();
+                if(status<200||status>=300)throw new IllegalStateException("REST nonce AJAX HTTP "+status);
+                String nonce=RestNonceParser.fromAjax(readResponseText(c,256));
+                if(nonce==null)throw new IllegalStateException("WordPress AJAX không trả về mã REST hợp lệ.");
+                return nonce;
+            }finally{c.disconnect();}
+        }catch(Exception e){
+            // Do not log response bodies, cookies, passwords or nonce values.
+            ajaxFailure=e;
+            Log.w(TAG,"WordPress REST nonce AJAX failed: "+e.getClass().getSimpleName());
+        }
+
+        try{
+            String url=MedRefDataRuntime.REMOTE_ROOT+"/medipharm/";
+            String webCookies=CookieManager.getInstance().getCookie(url);
+            if(webCookies==null||webCookies.isEmpty())webCookies=cookie;
+            HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
+            c.setConnectTimeout(10000);c.setReadTimeout(20000);c.setUseCaches(false);
+            c.setInstanceFollowRedirects(false);
+            c.setRequestProperty("Accept","text/html");
+            c.setRequestProperty("Cookie",webCookies==null?"":webCookies);
+            c.setRequestProperty("Cache-Control","no-cache, no-store");
+            c.setRequestProperty("Pragma","no-cache");
+            c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
+            try{
+                int status=c.getResponseCode();
+                if(status<200||status>=300)throw new IllegalStateException("Trang MEDIPHARM HTTP "+status);
+                String nonce=RestNonceParser.fromHtml(readResponseText(c,2*1024*1024));
+                if(nonce!=null)return nonce;
+            }finally{c.disconnect();}
+        }catch(Exception fallbackFailure){
+            if(ajaxFailure!=null)fallbackFailure.addSuppressed(ajaxFailure);
+            throw new IllegalStateException("Không thể lấy mã xác thực REST từ WordPress. Hãy kiểm tra phiên đăng nhập hoặc cấu hình admin-ajax của máy chủ.",fallbackFailure);
+        }
+        throw new IllegalStateException("Không thể lấy mã xác thực REST từ WordPress. Máy chủ không trả về nonce hợp lệ.",ajaxFailure);
+    }
+
+    private static String readResponseText(HttpURLConnection connection,int maxChars)throws Exception{
+        StringBuilder out=new StringBuilder();
+        try(BufferedReader reader=new BufferedReader(new InputStreamReader(connection.getInputStream(),java.nio.charset.StandardCharsets.UTF_8))){
+            char[] buffer=new char[4096];int n;
+            while((n=reader.read(buffer))!=-1){
+                if(out.length()+n>maxChars)throw new IllegalStateException("Phản hồi xác thực vượt giới hạn kích thước.");
+                out.append(buffer,0,n);
+            }
+        }
+        return out.toString();
     }
 
     @SuppressWarnings("SetJavaScriptEnabled") private void showEmbeddedLogin(){
