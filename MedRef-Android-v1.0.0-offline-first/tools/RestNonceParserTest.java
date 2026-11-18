@@ -8,7 +8,7 @@ public final class RestNonceParserTest {
     }
     public static void main(String[] args) {
         check("core plain-text nonce",EXPECTED.equals(RestNonceParser.fromAjax(EXPECTED)));
-        check("whitespace around nonce",EXPECTED.equals(RestNonceParser.fromAjax(" \\n"+EXPECTED+"\\n")));
+        check("whitespace around nonce",EXPECTED.equals(RestNonceParser.fromAjax(" \n"+EXPECTED+"\n")));
         check("anonymous AJAX response",RestNonceParser.fromAjax("0")==null);
         check("HTTP error HTML",RestNonceParser.fromAjax("<html>Log in</html>")==null);
         check("unrelated config ignored",RestNonceParser.fromHtml("<script>window.other={nonce:'"+EXPECTED+"'};</script>")==null);
