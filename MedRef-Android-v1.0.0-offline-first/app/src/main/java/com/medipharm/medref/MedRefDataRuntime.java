@@ -8,6 +8,8 @@ import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,6 +37,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.GZIPInputStream;
 
 public final class MedRefDataRuntime {
     public interface ProgressListener { void onProgress(int percent, String message); }
@@ -77,6 +80,7 @@ public final class MedRefDataRuntime {
 
     public static final String REMOTE_ROOT = "https://www.sachyhoc.com";
     public static final String OFFLINE_BASE = REMOTE_ROOT + "/wp-json/medipharm-reference/v1/offline/";
+    private static final String PROTOCOL_SNAPSHOT_BASE = REMOTE_ROOT + "/wp-json/medref-snapshot/v1/protocols/";
     public static final String MCR_BASE = REMOTE_ROOT + "/wp-json/medipharm-reference/v1/";
     public static final String MTP_BASE = REMOTE_ROOT + "/wp-json/medipharm-protocols/v1/";
     public static final String ICD_BASE = REMOTE_ROOT + "/wp-json/nah-icd10/v1/";
@@ -286,6 +290,23 @@ public final class MedRefDataRuntime {
 
         int totalOps=changedSlugs.size()+removedSlugs.size();
         if(totalOps==0)return;
+        // A large import must not generate hundreds of per-record batch queries.
+        // Replace the entire protocol table atomically from the prepared snapshot.
+        if(changedSlugs.size()>100){
+            MedRefDatabase replacement=MedRefDatabase.openReadWrite(getActiveDatabaseFile());
+            try{
+                replacement.begin();
+                replacement.clearDataset("protocols");
+                hydrateProtocolSnapshot(descriptor,cookie,nonce,row->replacement.insertProtocol(row),
+                        new Progress(remote,listener,java.util.Collections.singletonList("protocols")));
+                int count=replacement.datasetCount("protocols");
+                int expected=datasetCount(remote,"protocols",-1);
+                if(expected>=0&&count!=expected)
+                    throw new IOException("Protocol snapshot count mismatch: "+count+"/"+expected);
+                replacement.success();
+            }finally{replacement.end();replacement.close();}
+            return;
+        }
         if(listener!=null)listener.onProgress(1,"Đang chuẩn bị cập nhật "+totalOps+" phác đồ/quy trình thay đổi…");
 
         int batchSize=Math.max(1,Math.min(30,descriptor.optInt("batch_size",20)));
@@ -336,9 +357,10 @@ public final class MedRefDataRuntime {
                 String slug=row.optString("slug",""),updated=row.optString("updated_at","");
                 if(!slug.isEmpty())out.put(slug,updated);
             }
-            offset=page.optInt("next_offset",offset+rows.length());
+            int next=page.optInt("next_offset",offset+rows.length());
             if(!page.optBoolean("has_more",false))break;
-            if(rows.length()==0)throw new IOException("Protocol delta index trả về trang rỗng trước khi hoàn tất.");
+            if(rows.length()==0||next<=offset)throw new IOException("Protocol delta index có con trỏ phân trang không tiến lên.");
+            offset=next;
         }while(true);
         int expected=descriptor.optInt("count",-1);
         if(expected>=0&&out.size()!=expected)throw new IOException("Protocol index count mismatch: "+out.size()+"/"+expected);
@@ -441,13 +463,17 @@ public final class MedRefDataRuntime {
         String fingerprint=sha256Text(checkpointIdentity+"|"+BuildConfig.VERSION_CODE);
         // Upgrade from 1.0.10 must not discard verified, committed staging rows.
         String previousApkFingerprint=sha256Text(checkpointIdentity+"|10010");
+        String priorV1011=sha256Text(checkpointIdentity+"|10011");
+        String priorV1012=sha256Text(checkpointIdentity+"|10012");
         File checkpoint=new File(staging,"hydration-checkpoint.json");
         JSONObject state=null;
         if(new File(staging,"medref.db").isFile()&&checkpoint.isFile()){
             try{
                 JSONObject previousState=readJson(checkpoint);
                 if((fingerprint.equals(previousState.optString("fingerprint",""))
-                        || previousApkFingerprint.equals(previousState.optString("fingerprint","")))
+                        || previousApkFingerprint.equals(previousState.optString("fingerprint",""))
+                        || priorV1011.equals(previousState.optString("fingerprint",""))
+                        || priorV1012.equals(previousState.optString("fingerprint","")))
                         &&previousState.optJSONObject("completed")!=null)state=previousState;
             }catch(Exception ignored){ /* Invalid checkpoint: start from an empty staging slot. */ }
         }
@@ -542,6 +568,12 @@ public final class MedRefDataRuntime {
 
     private void hydrateDataset(JSONObject manifest,String key,String cookie,String nonce,Progress progress,RowConsumer consumer)throws Exception{
         JSONObject ds=manifest.getJSONObject("datasets").getJSONObject(key);
+        // Full protocol hydration is served from a prebuilt, private, compressed
+        // snapshot. Never trigger 273 uncached PHP pages on shared hosting.
+        if("protocols".equals(key)){
+            hydrateProtocolSnapshot(ds,cookie,nonce,consumer,progress);
+            return;
+        }
         String url=ds.getString("url");int page=Math.max(1,ds.optInt("page_size",100)),offset=0;
         do{
             JSONObject payload=fetchJson(new URL(url+(url.contains("?")?"&":"?")+"limit="+page+"&offset="+offset),cookie,nonce);
@@ -552,6 +584,67 @@ public final class MedRefDataRuntime {
             if(rows.length()==0||next<=offset)throw new IOException("Dataset "+key+" có con trỏ phân trang không tiến lên.");
             offset=next;
         }while(true);
+    }
+
+    /**
+     * Shared-hosting-safe protocol transport: a revision-pinned gzip NDJSON
+     * export produced only by an administrator. Metadata is checked before the
+     * download, and the complete SHA-256 is checked before SQLite insertion.
+     */
+    private void hydrateProtocolSnapshot(JSONObject descriptor,String cookie,String nonce,RowConsumer consumer,Progress progress)throws Exception{
+        JSONObject meta;
+        try{
+            meta=fetchJson(new URL(PROTOCOL_SNAPSHOT_BASE+"manifest"),cookie,nonce);
+        }catch(IOException failure){
+            if(failure.getMessage()!=null&&failure.getMessage().startsWith("HTTP 404"))
+                throw new IOException("Máy chủ chưa cài bộ tạo gói phác đồ nén. Không thực hiện tải 273 trang riêng lẻ để tránh quá tải hosting.",failure);
+            throw failure;
+        }
+        String revision=descriptor.optString("revision","");
+        String hash=meta.optString("sha256","").toLowerCase(Locale.ROOT);
+        int count=descriptor.optInt("count",-1);
+        if(!meta.optBoolean("ready",false))
+            throw new IOException("Máy chủ đang chuẩn bị gói phác đồ ngoại tuyến. Không tải lặp hàng nghìn bản ghi qua API.");
+        if(!"medref-protocol-ndjson-gzip/v1".equals(meta.optString("schema",""))
+                ||!revision.equals(meta.optString("revision",""))
+                ||count<0||count!=meta.optInt("count",-2)
+                ||!hash.matches("[a-f0-9]{64}"))
+            throw new IOException("Gói phác đồ nén chưa khớp phiên bản dữ liệu hiện tại. Cần tạo lại trên máy chủ.");
+        String url=meta.optString("download_url","");
+        if(!url.equals(PROTOCOL_SNAPSHOT_BASE+"download"))
+            throw new SecurityException("Đường dẫn tải phác đồ không thuộc máy chủ MEDIPHARM.");
+        File archive=new File(deltaCache,"full-protocols-"+hash+".ndjson.gz");
+        if(!archive.isFile()||!hash.equals(sha256(archive))){
+            downloadToFileWithRetry(new URL(url),archive,cookie,nonce,2,180000);
+        }
+        if(!hash.equals(sha256(archive))){
+            archive.delete();
+            throw new SecurityException("SHA-256 của gói phác đồ không khớp manifest.");
+        }
+        if(progress!=null)progress.emit(1,"Đã nhận gói phác đồ nén. Đang kiểm tra và lưu vào thiết bị…");
+        HashSet<String> seen=new HashSet<>();
+        int rows=0;
+        long rawBytes=0;
+        try(BufferedReader reader=new BufferedReader(new InputStreamReader(
+                new GZIPInputStream(new BufferedInputStream(new FileInputStream(archive)),65536),
+                StandardCharsets.UTF_8),65536)){
+            String line;
+            while((line=reader.readLine())!=null){
+                rawBytes+=line.length();
+                if(rawBytes>512L*1024L*1024L||line.length()>8*1024*1024)
+                    throw new SecurityException("Gói phác đồ giải nén vượt giới hạn an toàn.");
+                if(line.trim().isEmpty())continue;
+                JSONObject row=new JSONObject(line);
+                String slug=row.optString("slug","");
+                if(slug.isEmpty()||!seen.add(slug))
+                    throw new IOException("Gói phác đồ có mã trống hoặc trùng lặp.");
+                consumer.accept(row);
+                rows++;
+                if(progress!=null)progress.advance("protocols");
+                if(rows>count)throw new IOException("Gói phác đồ có số bản ghi vượt manifest.");
+            }
+        }
+        if(rows!=count)throw new IOException("Gói phác đồ thiếu dữ liệu: "+rows+"/"+count);
     }
 
     private void hydrateMedia(JSONObject manifest,String cookie,String nonce,File mediaDir,Progress progress)throws Exception{

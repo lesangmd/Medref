@@ -274,17 +274,8 @@ public final class MainActivity extends Activity {
                 String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
                 MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
                 cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
-                // The first hydration activates the clinical library before media.
-                // After interruption, resume only pending media automatically.
-                if(plan.mediaChanged && plan.changedDatasets.isEmpty() && !plan.runtimeChanged){
-                    main.post(()->{
-                        if(!DataUpdateService.isRunning(this) && !syncRunning && dataRuntime!=null
-                                && dataRuntime.hasValidOfflineSession()){
-                            try{DataUpdateService.start(this,cookie,nonce);}
-                            catch(Exception e){Log.w(TAG,"resume media update",e);}
-                        }
-                    });
-                }
+                // Do not automatically fetch thousands of images on app startup.
+                // The user can explicitly request a background media update from the menu.
             }catch(Exception e){
                 Log.w(TAG,"background update preflight",e);
             }finally{
@@ -441,14 +432,8 @@ public final class MainActivity extends Activity {
                     syncRunning=false;
                     getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
                     loadLocalApp();
-                    if(plan.fullHydrate){
-                        // The first hydrate is clinical-data-first. Complete media
-                        // using the foreground service after opening the app.
-                        try{DataUpdateService.start(this,cookie,nonce);}
-                        catch(Exception serviceError){Log.w(TAG,"deferred initial media",serviceError);}
-                    }
                     if(visible)Toast.makeText(this,plan.fullHydrate
-                            ?"Thư viện đã sẵn sàng. Hình/bảng nguồn đang tải trong nền."
+                            ?"Thư viện đã sẵn sàng. Có thể chọn Cập nhật dữ liệu để tải hình/bảng nguồn khi thuận tiện."
                             :"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_LONG).show();
                 });
             }catch(Exception e){
