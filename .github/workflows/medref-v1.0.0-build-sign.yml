@@ -1,4 +1,4 @@
-name: Build and Sign MedRef v1.0.0
+name: Build and Sign MedRef Android
 
 on:
   workflow_dispatch:
@@ -70,12 +70,30 @@ jobs:
         shell: bash
         env:
           MEDREF_KEYSTORE_B64: ${{ secrets.MEDREF_KEYSTORE_B64 }}
+          MEDREF_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_KEYSTORE_PASSWORD }}
+          MEDREF_KEY_ALIAS: ${{ secrets.MEDREF_KEY_ALIAS }}
+          MEDREF_KEY_PASSWORD: ${{ secrets.MEDREF_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$MEDREF_KEYSTORE_B64"
+          for secret_name in MEDREF_KEYSTORE_B64 MEDREF_KEYSTORE_PASSWORD MEDREF_KEY_ALIAS MEDREF_KEY_PASSWORD; do
+            if [[ -z "${!secret_name}" ]]; then
+              echo "::error title=Missing signing secret::Configure $secret_name for this repository before building a signed APK."
+              exit 1
+            fi
+          done
           mkdir -p signing
-          printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks
-          test -s signing/medref-production.jks
+          chmod 700 signing
+          if ! printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks; then
+            echo "::error title=Invalid keystore::MEDREF_KEYSTORE_B64 is not valid base64."
+            exit 1
+          fi
+          chmod 600 signing/medref-production.jks
+          if [[ ! -s signing/medref-production.jks ]] ||
+             ! keytool -list -keystore signing/medref-production.jks \
+               -storepass "$MEDREF_KEYSTORE_PASSWORD" -alias "$MEDREF_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error title=Invalid signing configuration::Check the keystore, store password and key alias."
+            exit 1
+          fi
           echo "MEDREF_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/medref-production.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
@@ -101,18 +119,115 @@ jobs:
           AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt2"
           APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee APK-SIGNATURE.txt
+          EXPECTED_CERT_SHA256="40d054945671b6c78c996f5a176c834ace560d97c70c8caea766ac28f4ff6838"
+          grep -Fqi "Signer #1 certificate SHA-256 digest: $EXPECTED_CERT_SHA256" APK-SIGNATURE.txt || {
+            echo "::error title=Wrong signing certificate::Signed APK does not match the MedRef v1.0.9 baseline."
+            exit 1
+          }
           "$AAPT" dump badging "$APK" | tee APK-BADGING.txt
           grep -q "package: name='com.medipharm.medref'" APK-BADGING.txt
-          grep -q "versionName='1.0.0'" APK-BADGING.txt
+          BUILD_FILE=MedRef-Android-v1.0.0-offline-first/app/build.gradle
+          VERSION_NAME="$(sed -nE "s/^[[:space:]]*versionName '([^']+)'.*/\1/p" "$BUILD_FILE" | head -n 1)"
+          VERSION_CODE="$(sed -nE "s/^[[:space:]]*versionCode ([0-9]+).*/\1/p" "$BUILD_FILE" | head -n 1)"
+          test -n "$VERSION_NAME"
+          test -n "$VERSION_CODE"
+          grep -Fq "versionName='$VERSION_NAME'" APK-BADGING.txt
+          grep -Fq "versionCode='$VERSION_CODE'" APK-BADGING.txt
           mkdir -p dist
-          cp "$APK" dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk
-          sha256sum dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk | tee dist/MedRef-v1.0.0-OFFLINE-FIRST-signed.apk.sha256
+          cp "$APK" "dist/MedRef-v${VERSION_NAME}-signed.apk"
+          sha256sum "dist/MedRef-v${VERSION_NAME}-signed.apk" | tee "dist/MedRef-v${VERSION_NAME}-signed.apk.sha256"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MedRef-v1.0.0-OFFLINE-FIRST-signed
+          name: MedRef-Android-signed
           path: |
             dist/*
             SOURCE-SHA256.txt
             APK-SIGNATURE.txt
             APK-BADGING.txt
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: build-sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUILD_FILE=MedRef-Android-v1.0.0-offline-first/app/build.gradle
+          VERSION_NAME="$(sed -nE "s/^[[:space:]]*versionName '([^']+)'.*/\1/p" "$BUILD_FILE" | head -n 1)"
+          VERSION_CODE="$(sed -nE "s/^[[:space:]]*versionCode ([0-9]+).*/\1/p" "$BUILD_FILE" | head -n 1)"
+          test -n "$VERSION_NAME"
+          test -n "$VERSION_CODE"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
+      - name: Download verified signed artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name MedRef-Android-signed --dir verified-artifact
+          APK="verified-artifact/dist/MedRef-v${VERSION_NAME}-signed.apk"
+          test -s "$APK"
+          (cd verified-artifact && sha256sum -c "dist/MedRef-v${VERSION_NAME}-signed.apk.sha256")
+          cp "$APK" "MedRef-v${VERSION_NAME}.apk"
+          cp "$APK" MedRef-latest.apk
+      - name: Publish GitHub latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="medref-v${VERSION_NAME}"
+          SHA256="$(sha256sum "MedRef-v${VERSION_NAME}.apk" | cut -d' ' -f1)"
+          NOTES="MedRef Android v${VERSION_NAME} (versionCode ${VERSION_CODE}). New signing baseline; existing installations signed with the old certificate require backup and reinstall. Certificate SHA-256: 40d054945671b6c78c996f5a176c834ace560d97c70c8caea766ac28f4ff6838. APK SHA-256: ${SHA256}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "MedRef Android v${VERSION_NAME}" --notes "$NOTES" --latest
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "MedRef Android v${VERSION_NAME}" --notes "$NOTES" --latest
+          fi
+          gh release upload "$TAG" \
+            "MedRef-v${VERSION_NAME}.apk#MedRef-v${VERSION_NAME}.apk" \
+            "MedRef-latest.apk#MedRef-latest.apk" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets \
+            | jq -e --arg version "MedRef-v${VERSION_NAME}.apk" '
+                ([.assets[].name] | index($version) != null) and
+                ([.assets[].name] | index("MedRef-latest.apk") != null)
+              ' >/dev/null
+      - name: Update Android app manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA256="$(sha256sum "MedRef-v${VERSION_NAME}.apk" | cut -d' ' -f1)"
+          BYTES="$(stat -c%s "MedRef-v${VERSION_NAME}.apk")"
+          jq --arg version "$VERSION_NAME" \
+             --argjson code "$VERSION_CODE" \
+             --arg sha "$SHA256" \
+             --argjson bytes "$BYTES" \
+             --arg source "https://github.com/${GITHUB_REPOSITORY}/releases/download/medref-v${VERSION_NAME}/MedRef-v${VERSION_NAME}.apk" '
+            .versionName=$version |
+            .versionCode=$code |
+            .sha256=$sha |
+            .bytes=$bytes |
+            .sourceDownloadUrl=$source |
+            .downloadUrl="https://github.com/lesangmd/Medref/releases/latest/download/MedRef-latest.apk" |
+            .release="New Signing Baseline"
+          ' medref-update.json > medref-update.next.json
+          mv medref-update.next.json medref-update.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- medref-update.json; then
+            git add medref-update.json
+            git commit -m "release: point MedRef Android updater to v${VERSION_NAME} signed baseline"
+            git push origin HEAD:main
+          fi
