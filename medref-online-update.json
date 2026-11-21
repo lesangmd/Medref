@@ -1,0 +1,13 @@
+{
+  "schema": "medref-online-app-update/v1",
+  "packageId": "com.medipharm.medref.online",
+  "versionCode": 10014,
+  "versionName": "1.0.14",
+  "minimumAndroidApi": 31,
+  "releaseStatus": "signed-candidate-device-validation-pending",
+  "downloadUrl": "",
+  "sha256": "85f42e81c1fe95cc72f3d9ecc2e2d669cae7f418dc191817613893dc368d32d8",
+  "bytes": 317524,
+  "signingCertificateSha256": "1e95abec4e346a18b8ff6c38284bf37f4831728a33a381749072b5c8f2522150",
+  "webCompanionVersion": "3.5.46"
+}
