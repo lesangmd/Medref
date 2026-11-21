@@ -98,7 +98,7 @@ public final class MainActivity extends Activity {
             return;
         }
         if(isMemberAuthenticated())loadOnlineApp();
-        else showGate("MedRef","Đăng nhập MEDIPHARM để tra cứu trực tuyến phác đồ, quy trình và ICD-10. Ứng dụng không tải hàng nghìn bản ghi vào thiết bị.",
+        else showGate("MedRef Online","Đăng nhập MEDIPHARM để tra cứu trực tuyến phác đồ, quy trình và ICD-10. Ứng dụng không tải hàng nghìn bản ghi vào thiết bị.",
                 "Đăng nhập",v->showEmbeddedLogin(),null,null);
     }
 
@@ -414,7 +414,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showAbout(){
-        String message="MedRef là ứng dụng tham chiếu lâm sàng MEDIPHARM dành cho nhân viên y tế.\n\n"
+        String message="MedRef Online là ứng dụng tham chiếu lâm sàng MEDIPHARM dành cho nhân viên y tế.\n\n"
                 +"• Tra cứu phác đồ và quy trình trực tuyến theo chuyên khoa.\n"
                 +"• Tìm kiếm ICD-10 và liên kết phác đồ liên quan.\n"
                 +"• Chỉ tải danh sách ngắn hoặc nội dung khi được mở.\n"
@@ -450,7 +450,7 @@ public final class MainActivity extends Activity {
         Exception first=null;
         try{return fetchPublicJson(BuildConfig.APP_UPDATE_MANIFEST_URL);}
         catch(Exception e){first=e;}
-        try{return fetchPublicJson("https://raw.githubusercontent.com/lesangmd/Medref/main/medref-update.json?ts="+System.currentTimeMillis());}
+        try{return fetchPublicJson("https://raw.githubusercontent.com/lesangmd/Medref/main/medref-online-update.json?ts="+System.currentTimeMillis());}
         catch(Exception second){if(first!=null)second.addSuppressed(first);throw second;}
     }
 

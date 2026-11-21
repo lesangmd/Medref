@@ -28,12 +28,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="www.sachyhoc.com" android:pathPrefix="/medipharm/" />
-            </intent-filter>
         </activity>
         <service android:name=".AppUpdateJobService" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
