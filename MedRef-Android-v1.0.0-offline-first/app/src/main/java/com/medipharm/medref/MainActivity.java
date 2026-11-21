@@ -414,12 +414,12 @@ public final class MainActivity extends Activity {
     }
 
     private void showAbout(){
-        String message="MedRef là ứng dụng tham chiếu lâm sàng MEDIPHARM dành cho nhân viên y tế.\\n\\n"
-                +"• Tra cứu phác đồ và quy trình trực tuyến theo chuyên khoa.\\n"
-                +"• Tìm kiếm ICD-10 và liên kết phác đồ liên quan.\\n"
-                +"• Chỉ tải danh sách ngắn hoặc nội dung khi được mở.\\n"
-                +"• Sử dụng bộ nhớ đệm WebView theo chính sách máy chủ; không đồng bộ toàn bộ dữ liệu về thiết bị.\\n\\n"
-                +"Tài khoản và quyền truy cập do MEDIPHARM Membership quản lý.\\n\\n"
+        String message="MedRef là ứng dụng tham chiếu lâm sàng MEDIPHARM dành cho nhân viên y tế.\n\n"
+                +"• Tra cứu phác đồ và quy trình trực tuyến theo chuyên khoa.\n"
+                +"• Tìm kiếm ICD-10 và liên kết phác đồ liên quan.\n"
+                +"• Chỉ tải danh sách ngắn hoặc nội dung khi được mở.\n"
+                +"• Sử dụng bộ nhớ đệm WebView theo chính sách máy chủ; không đồng bộ toàn bộ dữ liệu về thiết bị.\n\n"
+                +"Tài khoản và quyền truy cập do MEDIPHARM Membership quản lý.\n\n"
                 +"Phiên bản: "+BuildConfig.VERSION_NAME;
         new AlertDialog.Builder(this).setTitle("Giới thiệu MedRef")
                 .setMessage(message).setPositiveButton("Đóng",null).show();
@@ -469,7 +469,6 @@ public final class MainActivity extends Activity {
     private boolean networkAvailable(){try{ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);Network n=cm.getActiveNetwork();if(n==null)return false;NetworkCapabilities c=cm.getNetworkCapabilities(n);return c!=null&&(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));}catch(Exception e){return false;}}
     private static boolean isSachYHoc(Uri u){if(u==null||u.getHost()==null)return false;String h=u.getHost().toLowerCase(Locale.ROOT);return"sachyhoc.com".equals(h)||"www.sachyhoc.com".equals(h);}
     private static boolean isLoginPath(String p){if(p==null)return false;String x=p.toLowerCase(Locale.ROOT);return x.startsWith("/dangnhap")||x.startsWith("/dang-nhap")||x.startsWith("/wp-login.php");}
-    private static boolean isLocal(Uri u){return u!=null&&LocalContentServer.HOST.equalsIgnoreCase(u.getHost());}
     private void openExternal(Uri u){try{startActivity(new Intent(Intent.ACTION_VIEW,u));}catch(Exception ignored){}}
     private String safe(Throwable e){String m=e==null?"":e.getMessage();return(m==null||m.trim().isEmpty())?"Lỗi không xác định.":m;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
