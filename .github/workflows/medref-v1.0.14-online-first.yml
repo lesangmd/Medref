@@ -1,0 +1,143 @@
+name: MedRef v1.0.14 Online First Candidate
+
+on:
+  push:
+    branches:
+      - fix/medref-v1.0.14-online-first-no-bulk-sync
+    paths:
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-v1.0.14-online-first.yml'
+  pull_request:
+    paths:
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-v1.0.14-online-first.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Static and source regression QA
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/qa_online_first_v1014.py
+          for f in app/src/main/assets/web/assets/*.js; do node --check "$f"; done
+      - name: Build unsigned diagnostic APK
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+          test -s app/build/outputs/apk/release/app-release-unsigned.apk
+          mkdir -p ../out
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../out/MedRef-v1.0.14-DIAGNOSTIC-unsigned.apk
+          sha256sum ../out/MedRef-v1.0.14-DIAGNOSTIC-unsigned.apk > ../out/UNSIGNED-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-v1.0.14-unsigned-diagnostic
+          path: out/MedRef-v1.0.14-DIAGNOSTIC-unsigned.apk
+      - name: Build separately installable debug test APK
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug
+          APK='app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 31 "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -F "name='com.medipharm.medref.debug'"
+          mkdir -p ../out
+          cp "$APK" ../out/MedRef-v1.0.14-TEST-debug.apk
+          sha256sum ../out/MedRef-v1.0.14-TEST-debug.apk > ../out/DEBUG-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-v1.0.14-INSTALLABLE-DEBUG-TEST
+          path: |
+            out/MedRef-v1.0.14-TEST-debug.apk
+            out/DEBUG-SHA256.txt
+
+      - name: Detect original signing key availability
+        id: signing
+        shell: bash
+        env:
+          MEDREF_KEYSTORE_B64: ${{ secrets.MEDREF_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$MEDREF_KEYSTORE_B64" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Original MedRef production key missing. Debug APK produced; no upgrade APK will be published."
+          fi
+      - name: Restore existing MedRef signing identity
+        if: steps.signing.outputs.available == 'true'
+        shell: bash
+        env:
+          MEDREF_KEYSTORE_B64: ${{ secrets.MEDREF_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$MEDREF_KEYSTORE_B64" || { echo 'Production MedRef keystore not configured'; exit 1; }
+          mkdir -p signing
+          printf '%s' "$MEDREF_KEYSTORE_B64" | base64 -d > signing/medref-production.jks
+          test -s signing/medref-production.jks
+          echo "MEDREF_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/medref-production.jks" >> "$GITHUB_ENV"
+      - name: Build production-signed v1.0.14 APK
+        if: steps.signing.outputs.available == 'true'
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        env:
+          MEDREF_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_KEYSTORE_PASSWORD }}
+          MEDREF_KEY_ALIAS: ${{ secrets.MEDREF_KEY_ALIAS }}
+          MEDREF_KEY_PASSWORD: ${{ secrets.MEDREF_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$MEDREF_KEYSTORE_PASSWORD" && test -n "$MEDREF_KEY_ALIAS" && test -n "$MEDREF_KEY_PASSWORD"
+          gradle --no-daemon --stacktrace clean :app:assembleRelease
+          test -s app/build/outputs/apk/release/app-release.apk
+      - name: Validate package, signer and version before distributing
+        if: steps.signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='MedRef-Android-v1.0.0-offline-first/app/build/outputs/apk/release/app-release.apk'
+          TOOL="$ANDROID_HOME/build-tools/35.0.0"
+          "$TOOL/apksigner" verify --min-sdk-version 31 --print-certs "$APK" > signer.txt
+          grep -Fqi 'f3d869689d9c93b20b5259459bbf2895801c9b07a59dc65e414522db2d6bcd13' signer.txt
+          "$TOOL/aapt" dump badging "$APK" > badging.txt
+          grep -F "name='com.medipharm.medref'" badging.txt
+          grep -F "versionCode='10014'" badging.txt
+          grep -F "versionName='1.0.14'" badging.txt
+          mkdir -p out
+          cp "$APK" out/MedRef-v1.0.14-signed-candidate.apk
+          sha256sum out/MedRef-v1.0.14-signed-candidate.apk > out/SHA256SUMS.txt
+          cp signer.txt badging.txt out/
+      - uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.available == 'true'
+        with:
+          name: MedRef-v1.0.14-SIGNED-CANDIDATE
+          path: |
+            out/MedRef-v1.0.14-signed-candidate.apk
+            out/SHA256SUMS.txt
+            out/signer.txt
+            out/badging.txt
