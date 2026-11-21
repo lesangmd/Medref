@@ -60,13 +60,10 @@ import java.util.Locale;
 
 public final class MainActivity extends Activity {
     private static final String TAG="MedRef";
-    private static final String STARTUP_PREFS="medref_startup_sync";
-    private static final long INITIAL_SYNC_RETRY_COOLDOWN_MS=6L*60L*60L*1000L;
-    private static final long SILENT_CHECK_INTERVAL_MS=12L*60L*60L*1000L;
-    private static final String START_URL=LocalContentServer.ORIGIN+"/index.html";
+    private static final String START_URL="https://www.sachyhoc.com/medipharm/";
     private static final String LOGIN_URL="https://www.sachyhoc.com/dangnhap/";
     private static final String LOGIN_RETURN="https://www.sachyhoc.com/medipharm/?medref_auth_done=1";
-    private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OfflineFirst";
+    private static final String APP_UA=" MedRefAndroid/"+BuildConfig.VERSION_NAME+" OnlineFirst";
 
     private final Handler main=new Handler(Looper.getMainLooper());
     private FrameLayout root,webContainer;
@@ -75,12 +72,7 @@ public final class MainActivity extends Activity {
     private TextView gateTitle,gateMessage,progressText;
     private Button primaryButton,secondaryButton;
     private ProgressBar progress;
-    private MedRefDataRuntime dataRuntime;
-    private LocalContentServer localServer;
-    private volatile boolean syncRunning=false;
-    private volatile boolean backgroundUpdateCheckRunning=false;
-    private volatile MedRefDataRuntime.UpdatePlan cachedUpdatePlan=null;
-    private volatile long cachedUpdatePlanAt=0L;
+    private boolean loginTransitionPending=false;
     private Dialog loginDialog;
     private WebView loginView;
     private CredentialStore credentialStore;
@@ -94,41 +86,20 @@ public final class MainActivity extends Activity {
         configureSystemBars();
         buildShell();
         credentialStore=new CredentialStore(this);
-        new Thread(()->{
-            try{
-                dataRuntime=new MedRefDataRuntime(this);dataRuntime.ensureReady();
-                localServer=new LocalContentServer(this,dataRuntime);
-                main.post(this::afterRuntimeReady);
-            }catch(Exception e){Log.e(TAG,"runtime init",e);main.post(()->showGate("Không thể khởi tạo MedRef",safe(e),"Thử lại",v->recreate(),null,null));}
-        },"MedRef-init").start();
+        afterRuntimeReady();
     }
 
     private void afterRuntimeReady(){
+        // Online-first: no SQLite hydration or automatic media worker.
         AppUpdateJobService.schedule(this);
-        if(dataRuntime.hasValidOfflineSession()){
-            loadLocalApp();
-            if(networkAvailable()&&isMemberAuthenticated())main.postDelayed(this::scheduleBackgroundDataPreflight,2200L);
+        if(!networkAvailable()){
+            showGate("Chưa có kết nối Internet","MedRef hoạt động trực tuyến. Kiểm tra kết nối để xem nội dung lâm sàng mới nhất.",
+                    "Thử lại",v->afterRuntimeReady(),null,null);
             return;
         }
-        if(networkAvailable()&&isMemberAuthenticated()){
-            if(dataRuntime.hasActiveData())reauthenticateAndOpen();
-            else {
-                SharedPreferences p=getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE);
-                long last=p.getLong("last_automatic_hydration",0L);
-                long now=System.currentTimeMillis();
-                if(last>0L && now>=last && now-last<INITIAL_SYNC_RETRY_COOLDOWN_MS) {
-                    showGate("Chưa có dữ liệu ngoại tuyến",
-                            "Lần tải dữ liệu trước chưa hoàn tất. MedRef sẽ không tự tải lại liên tục khi khởi động. Kiểm tra kết nối rồi chọn Tải dữ liệu để tiếp tục.",
-                            "Tải dữ liệu",v->syncData(true),"Đăng nhập lại",v->showEmbeddedLogin());
-                } else {
-                    p.edit().putLong("last_automatic_hydration",now).apply();
-                    syncData(true);
-                }
-            }
-            return;
-        }
-        String msg=dataRuntime.hasActiveData()?"Phiên xác thực offline đã hết hạn. Đăng nhập MEDIPHARM để tiếp tục sử dụng ngay dữ liệu đã tải.":"Đăng nhập MEDIPHARM lần đầu để tải đầy đủ dữ liệu phác đồ, quy trình, ICD-10 và bảng/hình nguồn về thiết bị.";
-        showGate("MedRef",msg,"Đăng nhập",v->showEmbeddedLogin(),"Thử lại",v->afterRuntimeReady());
+        if(isMemberAuthenticated())loadOnlineApp();
+        else showGate("MedRef","Đăng nhập MEDIPHARM để tra cứu trực tuyến phác đồ, quy trình và ICD-10. Ứng dụng không tải hàng nghìn bản ghi vào thiết bị.",
+                "Đăng nhập",v->showEmbeddedLogin(),null,null);
     }
 
     private void buildShell(){
@@ -197,330 +168,83 @@ public final class MainActivity extends Activity {
         if(secondary!=null){secondaryButton.setText(secondary);secondaryButton.setOnClickListener(secondaryAction);secondaryButton.setVisibility(View.VISIBLE);}else secondaryButton.setVisibility(View.GONE);
     }
 
-    private void showSyncProgress(int pct,String msg){
-        gate.setVisibility(View.VISIBLE);webContainer.setVisibility(View.GONE);
-        gateTitle.setText("Đang đồng bộ dữ liệu");
-        gateMessage.setText("Đang tải và kiểm tra dữ liệu lâm sàng để mở thư viện. Hình/bảng nguồn sẽ được tải sau trong nền.");
-        progress.setVisibility(View.VISIBLE);progress.setProgress(Math.max(1,pct));
-        progressText.setVisibility(View.VISIBLE);progressText.setText(msg+"  ·  "+pct+"%");
-        primaryButton.setVisibility(View.VISIBLE);primaryButton.setEnabled(false);primaryButton.setAlpha(.88f);primaryButton.setText("↻  Đang đồng bộ dữ liệu…");primaryButton.setBackground(buttonBackground(Color.rgb(16,143,150),0));
-        secondaryButton.setVisibility(View.GONE);
-    }
+    // Clinical content is fetched on demand by the responsive WebApp.
 
     private void ensureWebView(){
         if(webView!=null)return;
         webView=new WebView(this);webView.setBackgroundColor(Color.WHITE);webContainer.addView(webView,new FrameLayout.LayoutParams(-1,-1));
-        WebSettings s=webView.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setCacheMode(WebSettings.LOAD_NO_CACHE);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setTextZoom(100);s.setDefaultTextEncodingName("UTF-8");s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setUserAgentString(s.getUserAgentString()+APP_UA);
-        CookieManager cm=CookieManager.getInstance();cm.setAcceptCookie(true);try{cm.setAcceptThirdPartyCookies(webView,true);}catch(Throwable ignored){}
-        webView.addJavascriptInterface(new NativeBridge(),"MedRefNative");
+        WebSettings s=webView.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);s.setDatabaseEnabled(true);s.setCacheMode(WebSettings.LOAD_DEFAULT);s.setSupportZoom(false);s.setBuiltInZoomControls(false);s.setDisplayZoomControls(false);s.setTextZoom(100);s.setDefaultTextEncodingName("UTF-8");s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);s.setUserAgentString(s.getUserAgentString()+APP_UA);
+        CookieManager cm=CookieManager.getInstance();cm.setAcceptCookie(true);try{cm.setAcceptThirdPartyCookies(webView,false);}catch(Throwable ignored){}
+        // Never expose a native JavaScript bridge to remote web content.
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient(){
-            @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){if(localServer!=null){WebResourceResponse r=localServer.intercept(request.getUrl());if(r!=null)return r;}return super.shouldInterceptRequest(view,request);}
-            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return handleNavigation(request.getUrl());}
-            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){if(request.isForMainFrame()&&isLocal(request.getUrl()))main.post(()->showGate("Không thể mở dữ liệu cục bộ","MedRef chưa thể tải giao diện offline.","Thử lại",v->loadLocalApp(),null,null));}
+            @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
+                return handleNavigation(request.getUrl());
+            }
+            @Override public void onReceivedError(WebView view,WebResourceRequest request,WebResourceError error){
+                if(request.isForMainFrame())main.post(()->showGate("Không thể mở MedRef",
+                    "Không tải được trang. Kiểm tra Internet rồi thử lại. Không có dữ liệu nào được tải hàng loạt.",
+                    "Thử lại",v->loadOnlineApp(),"Đăng nhập",v->showEmbeddedLogin()));
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response){
+                if(!request.isForMainFrame())return;
+                int code=response.getStatusCode();
+                if(code==401||code==403){
+                    main.post(()->showGate("Phiên đăng nhập đã hết hạn",
+                        "Cần đăng nhập MEDIPHARM để tiếp tục tra cứu.",
+                        "Đăng nhập",v->showEmbeddedLogin(),null,null));
+                }else if(code>=500){
+                    main.post(()->showGate("Máy chủ đang bận",
+                        "Dịch vụ MEDIPHARM tạm thời chưa phản hồi. Ứng dụng không tự thử lại liên tục để tránh tăng tải hosting.",
+                        "Thử lại",v->loadOnlineApp(),null,null));
+                }
+            }
         });
         webView.setDownloadListener((url,userAgent,contentDisposition,mimeType,contentLength)->download(url,userAgent,contentDisposition,mimeType));
     }
 
-    private void loadLocalApp(){
-        try{if(localServer!=null)localServer.reload();}catch(Exception e){showGate("Dữ liệu offline chưa sẵn sàng",safe(e),"Thử lại",v->afterRuntimeReady(),null,null);return;}
-        ensureWebView();gate.setVisibility(View.GONE);webContainer.setVisibility(View.VISIBLE);String url=START_URL+"?auth=1&data="+Uri.encode(dataRuntime.getDataVersion())+"&app="+Uri.encode(BuildConfig.VERSION_NAME);webView.loadUrl(url);
+    private void loadOnlineApp(){
+        if(!networkAvailable()){
+            showGate("Chưa có kết nối Internet","MedRef cần mạng để tra cứu. Không thực hiện tải bộ dữ liệu ngoại tuyến.",
+                    "Thử lại",v->loadOnlineApp(),null,null);
+            return;
+        }
+        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
+        ensureWebView();
+        gate.setVisibility(View.GONE);
+        webContainer.setVisibility(View.VISIBLE);
+        webView.loadUrl(START_URL);
     }
 
     private boolean handleNavigation(Uri uri){
-        if(uri==null||uri.getScheme()==null)return false;String scheme=uri.getScheme().toLowerCase(Locale.ROOT);
-        if("medref".equals(scheme)){String action=uri.getHost();if("login".equals(action))showEmbeddedLogin();else if("logout".equals(action))logout();else if("data-update".equals(action))checkDataUpdateInteractive();else if("rollback-data".equals(action))confirmRollback();else if("about".equals(action))showAbout();else if("check-update".equals(action))checkAppUpdate(true);return true;}
-        if(isLocal(uri))return false;
-        if("https".equals(scheme)){if(isSachYHoc(uri)&&isLoginPath(uri.getPath())){showEmbeddedLogin();return true;}openExternal(uri);return true;}
-        openExternal(uri);return true;
-    }
-
-    private void reauthenticateAndOpen(){
-        if(syncRunning)return;
-        if(!networkAvailable()){showGate("Chưa thể xác thực","Cần kết nối Internet để xác thực lại tài khoản MEDIPHARM.","Thử lại",v->reauthenticateAndOpen(),"Đăng nhập lại",v->showEmbeddedLogin());return;}
-        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
-        syncRunning=true;
-        showGate("Đang xác thực tài khoản","MedRef đang xác thực quyền truy cập. Dữ liệu đã tải trên thiết bị sẽ được giữ nguyên.",null,null,null,null);
-        new Thread(()->{
-            try{
-                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
-                dataRuntime.reauthenticate(cookie,nonce);
-                main.post(()->{
-                    syncRunning=false;
-                    loadLocalApp();
-                    Toast.makeText(this,"Đăng nhập thành công.",Toast.LENGTH_SHORT).show();
-                    if(networkAvailable())main.postDelayed(this::scheduleBackgroundDataPreflight,2200L);
-                });
-            }catch(Exception e){
-                Log.e(TAG,"reauth",e);
-                main.post(()->{
-                    syncRunning=false;
-                    showGate("Chưa thể xác thực tài khoản",safe(e),"Thử lại",v->reauthenticateAndOpen(),"Đăng nhập lại",v->showEmbeddedLogin());
-                });
-            }
-        },"MedRef-reauth").start();
-    }
-
-    private void scheduleBackgroundDataPreflight(){
-        if(backgroundUpdateCheckRunning||syncRunning||DataUpdateService.isRunning(this)||dataRuntime==null||!dataRuntime.hasActiveData())return;
-        if(!networkAvailable()||!isMemberAuthenticated())return;
-        SharedPreferences p=getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE);
-        long now=System.currentTimeMillis(),last=p.getLong("last_silent_check",0L);
-        if(last>0L && now>=last && now-last<SILENT_CHECK_INTERVAL_MS)return;
-        p.edit().putLong("last_silent_check",now).apply();
-        backgroundUpdateCheckRunning=true;
-        new Thread(()->{
-            try{
-                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
-                MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
-                cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
-                // Do not automatically fetch thousands of images on app startup.
-                // The user can explicitly request a background media update from the menu.
-            }catch(Exception e){
-                Log.w(TAG,"background update preflight",e);
-            }finally{
-                backgroundUpdateCheckRunning=false;
-            }
-        },"MedRef-background-preflight").start();
-    }
-
-    private void checkDataUpdateInteractive(){
-        if(DataUpdateService.isRunning(this)){
-            showBackgroundUpdateStatus();
-            return;
+        if(uri==null||uri.getScheme()==null)return true;
+        String scheme=uri.getScheme().toLowerCase(Locale.ROOT);
+        if("medref".equals(scheme)){
+            String action=uri.getHost();
+            if("login".equals(action))showEmbeddedLogin();
+            else if("logout".equals(action))logout();
+            else if("about".equals(action))showAbout();
+            else if("check-update".equals(action))checkAppUpdate(true);
+            else if("data-update".equals(action))loadOnlineApp();
+            else if("rollback-data".equals(action))
+                Toast.makeText(this,"MedRef trực tuyến không sử dụng gói ngoại tuyến.",Toast.LENGTH_LONG).show();
+            return true;
         }
-        if(syncRunning){
-            new AlertDialog.Builder(this)
-                    .setTitle("Đang kiểm tra dữ liệu")
-                    .setMessage("MedRef đang kiểm tra phiên bản dữ liệu mới. Bạn vẫn có thể tiếp tục sử dụng ứng dụng.")
-                    .setPositiveButton("Đóng",null)
-                    .show();
-            return;
+        if("https".equals(scheme)){
+            if(isSachYHoc(uri)&&isLoginPath(uri.getPath())){showEmbeddedLogin();return true;}
+            String path=uri.getPath()==null?"":uri.getPath().toLowerCase(Locale.ROOT);
+            if("www.sachyhoc.com".equalsIgnoreCase(uri.getHost()) &&
+                    (path.equals("/medipharm")||path.startsWith("/medipharm/")))return false;
+            openExternal(uri);
+            return true;
         }
-        if(!networkAvailable()){Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
-        if(!isMemberAuthenticated()){showEmbeddedLogin();return;}
-        syncRunning=true;
-        Toast.makeText(this,"Đang kiểm tra dữ liệu mới…",Toast.LENGTH_SHORT).show();
-        new Thread(()->{
-            try{
-                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
-                MedRefDataRuntime.UpdatePlan plan=null;
-                long age=System.currentTimeMillis()-cachedUpdatePlanAt;
-                if(cachedUpdatePlan!=null&&age>=0&&age<=30000L)plan=cachedUpdatePlan;
-                if(plan==null)plan=dataRuntime.checkForUpdates(cookie,nonce);
-                cachedUpdatePlan=plan;cachedUpdatePlanAt=System.currentTimeMillis();
-                final MedRefDataRuntime.UpdatePlan readyPlan=plan;
-                main.post(()->{
-                    syncRunning=false;
-                    presentUpdatePlan(readyPlan,cookie,nonce);
-                });
-            }catch(Exception e){
-                Log.e(TAG,"update preflight",e);
-                main.post(()->{
-                    syncRunning=false;
-                    new AlertDialog.Builder(this)
-                            .setTitle("Chưa thể kiểm tra dữ liệu mới")
-                            .setMessage(safe(e))
-                            .setNegativeButton("Đóng",null)
-                            .setPositiveButton("Thử lại",(d,w)->checkDataUpdateInteractive())
-                            .show();
-                });
-            }
-        },"MedRef-update-preflight").start();
-    }
-
-    private void presentUpdatePlan(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce){
-        if(plan==null||!plan.hasChanges()){
-            new AlertDialog.Builder(this)
-                    .setTitle("Dữ liệu đã cập nhật")
-                    .setMessage("Thiết bị đang có dữ liệu MedRef mới nhất. Không cần tải lại.")
-                    .setPositiveButton("Đóng",null)
-                    .show();
-            return;
-        }
-        StringBuilder msg=new StringBuilder("Phát hiện dữ liệu mới:\n\n").append(plan.summary());
-        int protocols=plan.remoteCount("protocols");
-        if(protocols>=0)msg.append("\n\nPhác đồ / Quy trình trên máy chủ: ").append(protocols);
-        if(plan.usesProtocolDelta())msg.append("\n\nPhác đồ/Quy trình sẽ được cập nhật theo từng bản ghi thay đổi, không tải lại toàn bộ thư viện.");
-        else msg.append("\n\nMedRef chỉ tải những nhóm dữ liệu đã thay đổi.");
-        msg.append("\n\nQuá trình cập nhật chạy dưới nền. Bạn có thể tiếp tục tra cứu ứng dụng trong khi tải.");
-        new AlertDialog.Builder(this)
-                .setTitle("Có dữ liệu MedRef mới")
-                .setMessage(msg.toString())
-                .setNegativeButton("Để sau",null)
-                .setPositiveButton("Cập nhật nền",(d,w)->applyDataUpdate(plan,cookie,nonce,true))
-                .show();
-    }
-
-    private void applyDataUpdate(MedRefDataRuntime.UpdatePlan plan,String cookie,String nonce,boolean visible){
-        if(DataUpdateService.isRunning(this)){
-            if(visible)showBackgroundUpdateStatus();
-            return;
-        }
-        try{
-            cachedUpdatePlan=null;cachedUpdatePlanAt=0L;
-            DataUpdateService.start(this,cookie,nonce);
-            if(visible){
-                new AlertDialog.Builder(this)
-                        .setTitle("Đã bắt đầu cập nhật nền")
-                        .setMessage("MedRef sẽ tiếp tục tải và kiểm tra dữ liệu ở chế độ nền. Bạn có thể tiếp tục tra cứu phác đồ, quy trình và ICD-10 bằng dữ liệu hiện có.")
-                        .setNegativeButton("Xem tiến độ",(d,w)->main.postDelayed(this::showBackgroundUpdateStatus,450L))
-                        .setPositiveButton("Tiếp tục sử dụng",null)
-                        .show();
-            }
-        }catch(Exception e){
-            Log.e(TAG,"start background update",e);
-            if(visible)new AlertDialog.Builder(this)
-                    .setTitle("Chưa thể bắt đầu cập nhật")
-                    .setMessage(safe(e))
-                    .setPositiveButton("Đóng",null)
-                    .show();
-        }
-    }
-
-    private void showBackgroundUpdateStatus(){
-        String state=DataUpdateService.state(this);
-        int pct=DataUpdateService.progress(this);
-        String msg=DataUpdateService.message(this);
-        if(DataUpdateService.STATE_RUNNING.equals(state)){
-            new AlertDialog.Builder(this)
-                    .setTitle("Đang cập nhật dữ liệu trong nền")
-                    .setMessage((msg==null||msg.isEmpty()?"MedRef đang cập nhật dữ liệu.":msg)+"\n\nTiến độ: "+pct+"%\n\nBạn có thể tiếp tục sử dụng ứng dụng.")
-                    .setNegativeButton("Kiểm tra lại",(d,w)->main.postDelayed(this::showBackgroundUpdateStatus,700L))
-                    .setPositiveButton("Tiếp tục sử dụng",null)
-                    .show();
-        }else if(DataUpdateService.STATE_DONE.equals(state)){
-            new AlertDialog.Builder(this)
-                    .setTitle("Cập nhật dữ liệu hoàn tất")
-                    .setMessage(msg==null||msg.isEmpty()?"Dữ liệu mới đã sẵn sàng.":msg)
-                    .setPositiveButton("Đóng",null)
-                    .show();
-        }else if(DataUpdateService.STATE_FAILED.equals(state)){
-            new AlertDialog.Builder(this)
-                    .setTitle("Cập nhật chưa hoàn tất")
-                    .setMessage((msg==null||msg.isEmpty()?"Dữ liệu hiện có vẫn được giữ nguyên.":msg)+"\n\nLần cập nhật tiếp theo sẽ tái sử dụng các phần đã tải và tiếp tục phần còn thiếu.")
-                    .setNegativeButton("Đóng",null)
-                    .setPositiveButton("Thử lại",(d,w)->checkDataUpdateInteractive())
-                    .show();
-        }else{
-            checkDataUpdateInteractive();
-        }
-    }
-
-    private void syncData(boolean visible){
-        if(syncRunning){if(visible)Toast.makeText(this,"MedRef đang xử lý dữ liệu.",Toast.LENGTH_SHORT).show();return;}
-        if(!networkAvailable()){if(visible)Toast.makeText(this,"Không có kết nối Internet.",Toast.LENGTH_SHORT).show();return;}
-        if(!isMemberAuthenticated()){if(visible)showEmbeddedLogin();return;}
-        syncRunning=true;
-        if(visible)showSyncProgress(1,"Đang kiểm tra dữ liệu mới…");
-        new Thread(()->{
-            try{
-                String cookie=memberCookie(),nonce=fetchRestNonce(cookie);
-                MedRefDataRuntime.UpdatePlan plan=dataRuntime.checkForUpdates(cookie,nonce);
-                if(!plan.hasChanges()){
-                    main.post(()->{
-                        syncRunning=false;
-                        getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
-                        loadLocalApp();
-                        if(visible)Toast.makeText(this,"Dữ liệu MedRef đang ở phiên bản mới nhất.",Toast.LENGTH_SHORT).show();
-                    });
-                    return;
-                }
-                MedRefDataRuntime.ProgressListener l=(pct,msg)->{if(visible)main.post(()->showSyncProgress(pct,msg));};
-                dataRuntime.applyUpdate(plan,cookie,nonce,l);
-                main.post(()->{
-                    syncRunning=false;
-                    getSharedPreferences(STARTUP_PREFS,MODE_PRIVATE).edit().remove("last_automatic_hydration").apply();
-                    loadLocalApp();
-                    if(visible)Toast.makeText(this,plan.fullHydrate
-                            ?"Thư viện đã sẵn sàng. Có thể chọn Cập nhật dữ liệu để tải hình/bảng nguồn khi thuận tiện."
-                            :"Đã cập nhật dữ liệu MedRef.",Toast.LENGTH_LONG).show();
-                });
-            }catch(Exception e){
-                Log.e(TAG,"sync",e);
-                main.post(()->{
-                    syncRunning=false;
-                    if(dataRuntime!=null&&dataRuntime.hasValidOfflineSession()){
-                        loadLocalApp();
-                        if(visible)Toast.makeText(this,"Đồng bộ chưa hoàn tất; đang dùng dữ liệu cục bộ gần nhất.",Toast.LENGTH_LONG).show();
-                    }else if(visible)showGate("Chưa thể đồng bộ dữ liệu",safe(e)+"\n\nCác phần đã tải thành công sẽ được giữ để tiếp tục khi thử lại.","Tiếp tục tải",v->syncData(true),"Đăng nhập lại",v->showEmbeddedLogin());
-                });
-            }
-        },"MedRef-sync").start();
-    }
-
-    /**
-     * WordPress REST cookie authentication requires an action-specific nonce.
-     * Fetch it from the authenticated core AJAX route first, using WebView cookies
-     * scoped to the actual AJAX URL. The front-end HTML is a legacy fallback only.
-     */
-    private String fetchRestNonce(String cookie)throws Exception{
-        Exception ajaxFailure=null;
-        try{
-            String endpoint=MedRefDataRuntime.REMOTE_ROOT+"/wp-admin/admin-ajax.php?action=rest-nonce";
-            String cookies=CookieManager.getInstance().getCookie(endpoint);
-            if(cookies==null||cookies.trim().isEmpty())throw new IllegalStateException("Không tìm thấy cookie đăng nhập WordPress.");
-            HttpURLConnection c=(HttpURLConnection)new URL(endpoint).openConnection();
-            c.setConnectTimeout(10000);c.setReadTimeout(15000);c.setUseCaches(false);
-            c.setInstanceFollowRedirects(false);
-            c.setRequestProperty("Cookie",cookies);
-            c.setRequestProperty("Accept","text/plain");
-            c.setRequestProperty("Cache-Control","no-cache, no-store");
-            c.setRequestProperty("Pragma","no-cache");
-            c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
-            try{
-                int status=c.getResponseCode();
-                if(status<200||status>=300)throw new IllegalStateException("REST nonce AJAX HTTP "+status);
-                String nonce=RestNonceParser.fromAjax(readResponseText(c,256));
-                if(nonce==null)throw new IllegalStateException("WordPress AJAX không trả về mã REST hợp lệ.");
-                return nonce;
-            }finally{c.disconnect();}
-        }catch(Exception e){
-            // Do not log response bodies, cookies, passwords or nonce values.
-            ajaxFailure=e;
-            Log.w(TAG,"WordPress REST nonce AJAX failed: "+e.getClass().getSimpleName());
-        }
-
-        try{
-            String url=MedRefDataRuntime.REMOTE_ROOT+"/medipharm/";
-            String webCookies=CookieManager.getInstance().getCookie(url);
-            if(webCookies==null||webCookies.isEmpty())webCookies=cookie;
-            HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();
-            c.setConnectTimeout(10000);c.setReadTimeout(20000);c.setUseCaches(false);
-            c.setInstanceFollowRedirects(false);
-            c.setRequestProperty("Accept","text/html");
-            c.setRequestProperty("Cookie",webCookies==null?"":webCookies);
-            c.setRequestProperty("Cache-Control","no-cache, no-store");
-            c.setRequestProperty("Pragma","no-cache");
-            c.setRequestProperty("User-Agent","MedRefAndroid/"+BuildConfig.VERSION_NAME);
-            try{
-                int status=c.getResponseCode();
-                if(status<200||status>=300)throw new IllegalStateException("Trang MEDIPHARM HTTP "+status);
-                String nonce=RestNonceParser.fromHtml(readResponseText(c,2*1024*1024));
-                if(nonce!=null)return nonce;
-            }finally{c.disconnect();}
-        }catch(Exception fallbackFailure){
-            if(ajaxFailure!=null)fallbackFailure.addSuppressed(ajaxFailure);
-            throw new IllegalStateException("Không thể lấy mã xác thực REST từ WordPress. Hãy kiểm tra phiên đăng nhập hoặc cấu hình admin-ajax của máy chủ.",fallbackFailure);
-        }
-        throw new IllegalStateException("Không thể lấy mã xác thực REST từ WordPress. Máy chủ không trả về nonce hợp lệ.",ajaxFailure);
-    }
-
-    private static String readResponseText(HttpURLConnection connection,int maxChars)throws Exception{
-        StringBuilder out=new StringBuilder();
-        try(BufferedReader reader=new BufferedReader(new InputStreamReader(connection.getInputStream(),java.nio.charset.StandardCharsets.UTF_8))){
-            char[] buffer=new char[4096];int n;
-            while((n=reader.read(buffer))!=-1){
-                if(out.length()+n>maxChars)throw new IllegalStateException("Phản hồi xác thực vượt giới hạn kích thước.");
-                out.append(buffer,0,n);
-            }
-        }
-        return out.toString();
+        openExternal(uri);
+        return true;
     }
 
     @SuppressWarnings("SetJavaScriptEnabled") private void showEmbeddedLogin(){
         if(loginDialog!=null&&loginDialog.isShowing())return;
-        pendingLoginUser="";pendingLoginPassword="";pendingRemember=false;loginAttemptInjected=false;
+        pendingLoginUser="";pendingLoginPassword="";pendingRemember=false;loginAttemptInjected=false;loginTransitionPending=false;
 
         Dialog d=new Dialog(this);d.requestWindowFeature(Window.FEATURE_NO_TITLE);d.setCanceledOnTouchOutside(true);loginDialog=d;
         LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setPadding(dp(2),dp(2),dp(2),dp(2));
@@ -629,12 +353,19 @@ public final class MainActivity extends Activity {
     }
 
     private void completeLogin(){main.post(()->{
+        if(loginTransitionPending)return;
+        loginTransitionPending=true;
         try{CookieManager.getInstance().flush();}catch(Throwable ignored){}
-        try{if(credentialStore!=null){if(pendingRemember)credentialStore.save(pendingLoginUser,pendingLoginPassword);else credentialStore.clear();}}catch(Exception e){Log.w(TAG,"credential store",e);}
+        try{
+            if(credentialStore!=null){
+                if(pendingRemember)credentialStore.save(pendingLoginUser,pendingLoginPassword);
+                else credentialStore.clear();
+            }
+        }catch(Exception e){Log.w(TAG,"credential store",e);}
         pendingLoginPassword="";
-        Dialog d=loginDialog;loginDialog=null;if(d!=null&&d.isShowing())d.dismiss();
-        if(dataRuntime!=null&&dataRuntime.hasActiveData())reauthenticateAndOpen();
-        else syncData(true);
+        Dialog d=loginDialog;loginDialog=null;
+        if(d!=null&&d.isShowing())d.dismiss();
+        loadOnlineApp();
     });}
 
     private void setLoginStatus(String message){setLoginStatus(message,true);}
@@ -660,23 +391,38 @@ public final class MainActivity extends Activity {
     private boolean isMemberAuthenticated(){String cookies=memberCookie();if(cookies.isEmpty())return false;for(String part:cookies.split(";")){int eq=part.indexOf('=');String name=(eq>=0?part.substring(0,eq):part).trim().toLowerCase(Locale.ROOT);if(name.startsWith("wordpress_logged_in_")||name.startsWith("wordpress_sec_")||(name.startsWith("wordpress_")&&!name.startsWith("wordpress_test_cookie")))return true;}return false;}
     private String memberCookie(){try{String c=CookieManager.getInstance().getCookie(MedRefDataRuntime.REMOTE_ROOT+"/");return c==null?"":c;}catch(Throwable e){return"";}}
 
-    private void logout(){try{CookieManager cm=CookieManager.getInstance();String c=memberCookie();for(String part:c.split(";")){int eq=part.indexOf('=');String name=(eq>=0?part.substring(0,eq):part).trim();String low=name.toLowerCase(Locale.ROOT);if(low.startsWith("wordpress_logged_in_")||low.startsWith("wordpress_sec_")||(low.startsWith("wordpress_")&&!low.startsWith("wordpress_test_cookie"))){String expired=name+"=; Max-Age=0; Path=/; Secure; SameSite=Lax";cm.setCookie("https://www.sachyhoc.com/",expired);cm.setCookie("https://sachyhoc.com/",expired);}}cm.flush();if(dataRuntime!=null)dataRuntime.clearSession();showGate("MedRef","Đã đăng xuất. Dữ liệu offline vẫn được giữ trên thiết bị.","Đăng nhập",v->showEmbeddedLogin(),null,null);}catch(Exception e){Toast.makeText(this,"Chưa thể đăng xuất.",Toast.LENGTH_SHORT).show();}}
+    private void logout(){
+        try{
+            CookieManager cm=CookieManager.getInstance();
+            String c=memberCookie();
+            for(String part:c.split(";")){
+                int eq=part.indexOf('=');String name=(eq>=0?part.substring(0,eq):part).trim();
+                String low=name.toLowerCase(Locale.ROOT);
+                if(low.startsWith("wordpress_logged_in_")||low.startsWith("wordpress_sec_")||
+                   (low.startsWith("wordpress_")&&!low.startsWith("wordpress_test_cookie"))){
+                    String expired=name+"=; Max-Age=0; Path=/; Secure; SameSite=Lax";
+                    cm.setCookie("https://www.sachyhoc.com/",expired);
+                    cm.setCookie("https://sachyhoc.com/",expired);
+                }
+            }
+            cm.flush();
+            if(credentialStore!=null)credentialStore.clear();
+            if(webView!=null){webView.loadUrl("about:blank");webView.clearHistory();webView.clearCache(true);}
+            showGate("MedRef","Đã đăng xuất. Dữ liệu lâm sàng được tra cứu trực tuyến; không lưu kho phác đồ trên thiết bị.",
+                "Đăng nhập",v->showEmbeddedLogin(),null,null);
+        }catch(Exception e){Toast.makeText(this,"Chưa thể đăng xuất.",Toast.LENGTH_SHORT).show();}
+    }
 
-    private void confirmRollback(){if(dataRuntime==null||!dataRuntime.hasRollback()){Toast.makeText(this,"Không có bản dữ liệu trước để khôi phục.",Toast.LENGTH_SHORT).show();return;}new AlertDialog.Builder(this).setTitle("Khôi phục dữ liệu trước").setMessage("MedRef sẽ đổi bộ dữ liệu hiện tại với previous-good trên thiết bị.").setNegativeButton("Hủy",null).setPositiveButton("Khôi phục",(d,w)->{try{dataRuntime.rollback();if(localServer!=null)localServer.reload();loadLocalApp();}catch(Exception e){Toast.makeText(this,"Khôi phục không thành công.",Toast.LENGTH_LONG).show();}}).show();}
     private void showAbout(){
-        String message="MedRef là ứng dụng tham chiếu lâm sàng của MEDIPHARM dành cho nhân viên y tế.\n\n"
-                +"• Tra cứu Phác đồ điều trị theo chuyên khoa và bệnh lý.\n"
-                +"• Tra cứu Quy trình chuyên môn trong cùng một giao diện.\n"
-                +"• Tìm kiếm ICD-10 và liên kết mã bệnh với phác đồ liên quan.\n"
-                +"• Lưu nội dung, hình ảnh, bảng và lược đồ cần thiết trên thiết bị để tiếp tục tra cứu khi không có Internet.\n"
-                +"• Khi có kết nối mạng, MedRef tự kiểm tra và đồng bộ dữ liệu mới để thư viện luôn được cập nhật.\n\n"
-                +"Tài khoản và quyền truy cập được quản lý bởi hệ thống Thành viên MEDIPHARM.\n\n"
-                +"Phiên bản ứng dụng: "+BuildConfig.VERSION_NAME;
-        new AlertDialog.Builder(this)
-                .setTitle("Giới thiệu MedRef")
-                .setMessage(message)
-                .setPositiveButton("Đóng",null)
-                .show();
+        String message="MedRef là ứng dụng tham chiếu lâm sàng MEDIPHARM dành cho nhân viên y tế.\\n\\n"
+                +"• Tra cứu phác đồ và quy trình trực tuyến theo chuyên khoa.\\n"
+                +"• Tìm kiếm ICD-10 và liên kết phác đồ liên quan.\\n"
+                +"• Chỉ tải danh sách ngắn hoặc nội dung khi được mở.\\n"
+                +"• Sử dụng bộ nhớ đệm WebView theo chính sách máy chủ; không đồng bộ toàn bộ dữ liệu về thiết bị.\\n\\n"
+                +"Tài khoản và quyền truy cập do MEDIPHARM Membership quản lý.\\n\\n"
+                +"Phiên bản: "+BuildConfig.VERSION_NAME;
+        new AlertDialog.Builder(this).setTitle("Giới thiệu MedRef")
+                .setMessage(message).setPositiveButton("Đóng",null).show();
     }
 
     private void checkAppUpdate(boolean userVisible){new Thread(()->{
@@ -728,14 +474,7 @@ public final class MainActivity extends Activity {
     private String safe(Throwable e){String m=e==null?"":e.getMessage();return(m==null||m.trim().isEmpty())?"Lỗi không xác định.":m;}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
 
-    private final class NativeBridge {
-        @JavascriptInterface public void updateData(){main.post(MainActivity.this::checkDataUpdateInteractive);}
-        @JavascriptInterface public void checkAppUpdate(){main.post(()->MainActivity.this.checkAppUpdate(true));}
-        @JavascriptInterface public void rollbackData(){main.post(MainActivity.this::confirmRollback);}
-        @JavascriptInterface public void about(){main.post(MainActivity.this::showAbout);}
-        @JavascriptInterface public void logout(){main.post(MainActivity.this::logout);}
-        @JavascriptInterface public void login(){main.post(MainActivity.this::showEmbeddedLogin);}
-    }
+    // No JavaScript bridge or background clinical-data sync in online-first mode.
 
     @Override public void onConfigurationChanged(Configuration newConfig){
         super.onConfigurationChanged(newConfig);
@@ -743,5 +482,5 @@ public final class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed(){if(loginDialog!=null&&loginDialog.isShowing()){loginDialog.dismiss();return;}if(webView!=null&&webView.canGoBack()){webView.goBack();return;}super.onBackPressed();}
-    @Override protected void onDestroy(){destroyLoginView();if(webView!=null){try{webView.destroy();}catch(Throwable ignored){}webView=null;}if(localServer!=null){localServer.close();localServer=null;}super.onDestroy();}
+    @Override protected void onDestroy(){destroyLoginView();if(webView!=null){try{webView.destroy();}catch(Throwable ignored){}webView=null;}super.onDestroy();}
 }
