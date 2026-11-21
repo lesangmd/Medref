@@ -73,3 +73,66 @@ jobs:
         with:
           name: MedRef-Online-SDK-SIGNING-TOOLS
           path: signer/
+
+      - name: Detect protected production signing secrets
+        id: prod_signing
+        shell: bash
+        env:
+          KEY_B64: ${{ secrets.MEDREF_ONLINE_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.MEDREF_ONLINE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MEDREF_ONLINE_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.MEDREF_ONLINE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEY_B64" ] && [ -n "$STORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Protected new MedRef Online signing secrets not configured. Safe unsigned build only.'
+          fi
+      - name: Restore privately stored MedRef Online signing identity
+        if: steps.prod_signing.outputs.available == 'true'
+        shell: bash
+        env:
+          KEY_B64: ${{ secrets.MEDREF_ONLINE_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/medref_online_signing"
+          chmod 700 "$RUNNER_TEMP/medref_online_signing"
+          printf '%s' "$KEY_B64" | base64 -d > "$RUNNER_TEMP/medref_online_signing/release.p12"
+          chmod 600 "$RUNNER_TEMP/medref_online_signing/release.p12"
+          echo "MEDREF_ONLINE_KEYSTORE_PATH=$RUNNER_TEMP/medref_online_signing/release.p12" >> "$GITHUB_ENV"
+      - name: Build independently signed MedRef Online APK
+        if: steps.prod_signing.outputs.available == 'true'
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        shell: bash
+        env:
+          MEDREF_ONLINE_KEYSTORE_PASSWORD: ${{ secrets.MEDREF_ONLINE_KEYSTORE_PASSWORD }}
+          MEDREF_ONLINE_KEY_ALIAS: ${{ secrets.MEDREF_ONLINE_KEY_ALIAS }}
+          MEDREF_ONLINE_KEY_PASSWORD: ${{ secrets.MEDREF_ONLINE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace clean :app:assembleRelease
+          APK='app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          SIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$SIGNER" verify --min-sdk-version 31 --print-certs "$APK" > ../dist/signed-certificate.txt
+          grep -Fqi '1e95abec4e346a18b8ff6c38284bf37f4831728a33a381749072b5c8f2522150' ../dist/signed-certificate.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > ../dist/signed-badging.txt
+          grep -F "name='com.medipharm.medref.online'" ../dist/signed-badging.txt
+          grep -F "versionCode='10014'" ../dist/signed-badging.txt
+          cp "$APK" ../dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk
+          sha256sum ../dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk > ../dist/SHA256-signed.txt
+      - uses: actions/upload-artifact@v4
+        if: steps.prod_signing.outputs.available == 'true'
+        with:
+          name: MedRef-Online-v1.0.14-PRODUCTION-SIGNED
+          path: |
+            dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk
+            dist/SHA256-signed.txt
+            dist/signed-certificate.txt
+            dist/signed-badging.txt
+      - name: Clean ephemeral signing key
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/medref_online_signing"
