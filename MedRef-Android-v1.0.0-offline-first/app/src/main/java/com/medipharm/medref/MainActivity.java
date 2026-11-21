@@ -465,7 +465,29 @@ public final class MainActivity extends Activity {
         }finally{c.disconnect();}
     }
 
-    private void download(String url,String ua,String disposition,String mime){try{DownloadManager.Request r=new DownloadManager.Request(Uri.parse(url));r.setMimeType(mime);r.addRequestHeader("User-Agent",ua);String c=memberCookie();if(!c.isEmpty())r.addRequestHeader("Cookie",c);String name=URLUtil.guessFileName(url,disposition,mime);r.setTitle(name);r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);r.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,name);((DownloadManager)getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(r);}catch(Exception e){openExternal(Uri.parse(url));}}
+    private void download(String url,String ua,String disposition,String mime){
+        try{
+            Uri target=Uri.parse(url);
+            if(!"https".equalsIgnoreCase(target.getScheme()))
+                throw new SecurityException("MedRef chỉ cho tải tệp qua HTTPS.");
+            DownloadManager.Request request=new DownloadManager.Request(target);
+            request.setMimeType(mime);
+            request.addRequestHeader("User-Agent",ua==null?"MedRefAndroid/"+BuildConfig.VERSION_NAME:ua);
+            // Never disclose WordPress session cookies to a third-party download host.
+            if(isSachYHoc(target)){
+                String cookie=memberCookie();
+                if(!cookie.isEmpty())request.addRequestHeader("Cookie",cookie);
+            }
+            String name=URLUtil.guessFileName(url,disposition,mime);
+            request.setTitle(name);
+            request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,name);
+            ((DownloadManager)getSystemService(Context.DOWNLOAD_SERVICE)).enqueue(request);
+        }catch(Exception e){
+            Log.w(TAG,"Unable to start download: "+e.getClass().getSimpleName());
+            Toast.makeText(this,"Không thể tải tệp. Kiểm tra kết nối HTTPS.",Toast.LENGTH_LONG).show();
+        }
+    }
     private boolean networkAvailable(){try{ConnectivityManager cm=(ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);Network n=cm.getActiveNetwork();if(n==null)return false;NetworkCapabilities c=cm.getNetworkCapabilities(n);return c!=null&&(c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));}catch(Exception e){return false;}}
     private static boolean isSachYHoc(Uri u){if(u==null||u.getHost()==null)return false;String h=u.getHost().toLowerCase(Locale.ROOT);return"sachyhoc.com".equals(h)||"www.sachyhoc.com".equals(h);}
     private static boolean isLoginPath(String p){if(p==null)return false;String x=p.toLowerCase(Locale.ROOT);return x.startsWith("/dangnhap")||x.startsWith("/dang-nhap")||x.startsWith("/wp-login.php");}
