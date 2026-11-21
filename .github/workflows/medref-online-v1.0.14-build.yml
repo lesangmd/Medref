@@ -1,0 +1,75 @@
+name: MedRef Online v1.0.14 - Independent Release Candidate
+
+on:
+  push:
+    branches:
+      - release/medref-online-v1.0.14-new-identity
+    paths:
+      - 'MedRef-Android-v1.0.0-offline-first/**'
+      - '.github/workflows/medref-online-v1.0.14-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Verify online-first and distinct package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd MedRef-Android-v1.0.0-offline-first
+          python3 tools/qa_online_first_v1014.py
+          grep -F "applicationId 'com.medipharm.medref.online'" app/build.gradle
+          grep -F '>MedRef Online</string>' app/src/main/res/values/strings.xml
+          ! grep -F 'DataUpdateService' app/src/main/AndroidManifest.xml
+      - name: Build unsigned release
+        shell: bash
+        working-directory: MedRef-Android-v1.0.0-offline-first
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace :app:assembleRelease
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../dist/MedRef-Online-v1.0.14-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../dist/MedRef-Online-v1.0.14-unsigned.apk > ../dist/badging.txt
+          grep -F "name='com.medipharm.medref.online'" ../dist/badging.txt
+          grep -F "versionCode='10014'" ../dist/badging.txt
+          sha256sum ../dist/MedRef-Online-v1.0.14-unsigned.apk > ../dist/SHA256-unsigned.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-Online-v1.0.14-UNSIGNED
+          path: |
+            dist/MedRef-Online-v1.0.14-unsigned.apk
+            dist/badging.txt
+            dist/SHA256-unsigned.txt
+      - name: Prepare stock Android SDK signer for offline signing station
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p signer
+          cp "$ANDROID_HOME/build-tools/35.0.0/lib/apksigner.jar" signer/
+          cp "$ANDROID_HOME/build-tools/35.0.0/zipalign" signer/
+          sha256sum signer/* > signer/TOOL-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MedRef-Online-SDK-SIGNING-TOOLS
+          path: signer/
