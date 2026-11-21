@@ -3,14 +3,14 @@ name: MedRef v1.0.14 Online First Candidate
 on:
   push:
     branches:
-      - fix/medref-v1.0.14-first-sync-nonblocking
+      - fix/medref-v1.0.14-online-first-no-bulk-sync
     paths:
       - 'MedRef-Android-v1.0.0-offline-first/**'
-      - '.github/workflows/medref-v1.0.14-candidate.yml'
+      - '.github/workflows/medref-v1.0.14-online-first.yml'
   pull_request:
     paths:
       - 'MedRef-Android-v1.0.0-offline-first/**'
-      - '.github/workflows/medref-v1.0.14-candidate.yml'
+      - '.github/workflows/medref-v1.0.14-online-first.yml'
   workflow_dispatch:
 
 permissions:
