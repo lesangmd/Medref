@@ -3,7 +3,7 @@ name: MedRef v1.0.15 - Independent Package Signing
 on:
   push:
     branches:
-      - release/medref-online-v1.0.15-new-identity
+      - release/medref-online-v1.0.14-new-identity
     paths:
       - 'MedRef-Android-v1.0.0-offline-first/**'
       - '.github/workflows/medref-online-v1.0.14-build.yml'
