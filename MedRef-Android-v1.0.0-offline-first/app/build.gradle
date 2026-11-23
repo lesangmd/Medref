@@ -5,18 +5,18 @@ android {
     compileSdk 35
 
     defaultConfig {
-        applicationId 'com.medipharm.medref'
+        applicationId 'com.medipharm.medref.online'
         minSdk 31
         targetSdk 35
-        versionCode 10014
-        versionName '1.0.14'
-        buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://www.sachyhoc.com/wp-json/medipharm-reference/v1/medref/app-version"'
+        versionCode 10015
+        versionName '1.0.15'
+        buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/lesangmd/Medref/main/medref-online-update.json"'
     }
 
-    def releaseKeystorePath = System.getenv('MEDREF_KEYSTORE_PATH')
-    def releaseStorePassword = System.getenv('MEDREF_KEYSTORE_PASSWORD')
-    def releaseKeyAlias = System.getenv('MEDREF_KEY_ALIAS')
-    def releaseKeyPassword = System.getenv('MEDREF_KEY_PASSWORD')
+    def releaseKeystorePath = System.getenv('MEDREF_ONLINE_KEYSTORE_PATH')
+    def releaseStorePassword = System.getenv('MEDREF_ONLINE_KEYSTORE_PASSWORD')
+    def releaseKeyAlias = System.getenv('MEDREF_ONLINE_KEY_ALIAS')
+    def releaseKeyPassword = System.getenv('MEDREF_ONLINE_KEY_PASSWORD')
     def hasReleaseSigning = releaseKeystorePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
     signingConfigs {

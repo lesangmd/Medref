@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MedRef v1.0.14 online-first safety and regression contract."""
+"""MedRef v1.0.15 online-first safety and regression contract."""
 from pathlib import Path
 import json
 
@@ -7,7 +7,7 @@ app = Path("app/src/main/java/com/medipharm/medref/MainActivity.java").read_text
 manifest = Path("app/src/main/AndroidManifest.xml").read_text()
 gradle = Path("app/build.gradle").read_text()
 tests = {
-    "correct_version": "versionCode 10014" in gradle and "versionName '1.0.14'" in gradle,
+    "correct_version": "versionCode 10015" in gradle and "versionName '1.0.15'" in gradle,
     "online_website_only": 'START_URL="https://www.sachyhoc.com/medipharm/"' in app,
     "first_launch_no_bulk": "afterRuntimeReady()" in app and "dataRuntime" not in app,
     "no_rest_nonce_gate": "fetchRestNonce" not in app,
@@ -27,5 +27,5 @@ tests = {
     "https_only": 'android:usesCleartextTraffic="false"' in manifest,
 }
 failed = [k for k, ok in tests.items() if not ok]
-print(json.dumps({"release":"MedRef Android 1.0.14 Online First","checks":len(tests),"passed":len(tests)-len(failed),"failed":failed,"status":"FAIL" if failed else "PASS"},ensure_ascii=False))
+print(json.dumps({"release":"MedRef Android 1.0.15 Online First","checks":len(tests),"passed":len(tests)-len(failed),"failed":failed,"status":"FAIL" if failed else "PASS"},ensure_ascii=False))
 raise SystemExit(1 if failed else 0)

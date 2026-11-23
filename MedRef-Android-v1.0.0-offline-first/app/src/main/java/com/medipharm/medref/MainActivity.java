@@ -450,7 +450,7 @@ public final class MainActivity extends Activity {
         Exception first=null;
         try{return fetchPublicJson(BuildConfig.APP_UPDATE_MANIFEST_URL);}
         catch(Exception e){first=e;}
-        try{return fetchPublicJson("https://raw.githubusercontent.com/lesangmd/Medref/main/medref-update.json?ts="+System.currentTimeMillis());}
+        try{return fetchPublicJson("https://raw.githubusercontent.com/lesangmd/Medref/main/medref-online-update.json?ts="+System.currentTimeMillis());}
         catch(Exception second){if(first!=null)second.addSuppressed(first);throw second;}
     }
 
