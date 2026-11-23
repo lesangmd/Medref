@@ -8,8 +8,8 @@ android {
         applicationId 'com.medipharm.medref.online'
         minSdk 31
         targetSdk 35
-        versionCode 10014
-        versionName '1.0.14'
+        versionCode 10015
+        versionName '1.0.15'
         buildConfigField 'String', 'APP_UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/lesangmd/Medref/main/medref-online-update.json"'
     }
 
