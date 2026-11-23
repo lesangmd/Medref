@@ -1,9 +1,9 @@
-name: MedRef Online v1.0.14 - Independent Release Candidate
+name: MedRef v1.0.15 - Independent Package Signing
 
 on:
   push:
     branches:
-      - release/medref-online-v1.0.14-new-identity
+      - release/medref-online-v1.0.15-new-identity
     paths:
       - 'MedRef-Android-v1.0.0-offline-first/**'
       - '.github/workflows/medref-online-v1.0.14-build.yml'
@@ -40,7 +40,7 @@ jobs:
           cd MedRef-Android-v1.0.0-offline-first
           python3 tools/qa_online_first_v1014.py
           grep -F "applicationId 'com.medipharm.medref.online'" app/build.gradle
-          grep -F '>MedRef Online</string>' app/src/main/res/values/strings.xml
+          grep -F '>MedRef</string>' app/src/main/res/values/strings.xml
           ! grep -F 'DataUpdateService' app/src/main/AndroidManifest.xml
       - name: Build unsigned release
         shell: bash
@@ -49,16 +49,17 @@ jobs:
           set -euo pipefail
           gradle --no-daemon --stacktrace :app:assembleRelease
           mkdir -p ../dist
-          cp app/build/outputs/apk/release/app-release-unsigned.apk ../dist/MedRef-Online-v1.0.14-unsigned.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../dist/MedRef-Online-v1.0.14-unsigned.apk > ../dist/badging.txt
+          cp app/build/outputs/apk/release/app-release-unsigned.apk ../dist/MedRef-Online-v1.0.15-unsigned.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging ../dist/MedRef-Online-v1.0.15-unsigned.apk > ../dist/badging.txt
           grep -F "name='com.medipharm.medref.online'" ../dist/badging.txt
-          grep -F "versionCode='10014'" ../dist/badging.txt
-          sha256sum ../dist/MedRef-Online-v1.0.14-unsigned.apk > ../dist/SHA256-unsigned.txt
+          grep -F "versionCode='10015'" ../dist/badging.txt
+          grep -F "application-label:'MedRef'" ../dist/badging.txt
+          sha256sum ../dist/MedRef-Online-v1.0.15-unsigned.apk > ../dist/SHA256-unsigned.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: MedRef-Online-v1.0.14-UNSIGNED
+          name: MedRef-Online-v1.0.15-UNSIGNED
           path: |
-            dist/MedRef-Online-v1.0.14-unsigned.apk
+            dist/MedRef-Online-v1.0.15-unsigned.apk
             dist/badging.txt
             dist/SHA256-unsigned.txt
       - name: Prepare stock Android SDK signer for offline signing station
@@ -119,15 +120,15 @@ jobs:
           grep -Fqi '1e95abec4e346a18b8ff6c38284bf37f4831728a33a381749072b5c8f2522150' ../dist/signed-certificate.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > ../dist/signed-badging.txt
           grep -F "name='com.medipharm.medref.online'" ../dist/signed-badging.txt
-          grep -F "versionCode='10014'" ../dist/signed-badging.txt
-          cp "$APK" ../dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk
-          sha256sum ../dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk > ../dist/SHA256-signed.txt
+          grep -F "versionCode='10015'" ../dist/signed-badging.txt
+          cp "$APK" ../dist/MedRef-Online-v1.0.15-PRODUCTION-SIGNED.apk
+          sha256sum ../dist/MedRef-Online-v1.0.15-PRODUCTION-SIGNED.apk > ../dist/SHA256-signed.txt
       - uses: actions/upload-artifact@v4
         if: steps.prod_signing.outputs.available == 'true'
         with:
-          name: MedRef-Online-v1.0.14-PRODUCTION-SIGNED
+          name: MedRef-Online-v1.0.15-PRODUCTION-SIGNED
           path: |
-            dist/MedRef-Online-v1.0.14-PRODUCTION-SIGNED.apk
+            dist/MedRef-Online-v1.0.15-PRODUCTION-SIGNED.apk
             dist/SHA256-signed.txt
             dist/signed-certificate.txt
             dist/signed-badging.txt
